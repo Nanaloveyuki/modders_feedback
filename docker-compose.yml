@@ -1,0 +1,39 @@
+services:
+  feedback:
+    build: .
+    image: ratkin-modders-feedback:latest
+    restart: unless-stopped
+    ports:
+      - "${FEEDBACK_PORT:-8080}:8080"
+    environment:
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-maintainer}
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATA_DIR: /data
+    secrets:
+      - admin_password
+      - jwt_secret
+    volumes:
+      - feedback-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "/app/feedback", "--healthcheck"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    stop_grace_period: 10s
+volumes:
+  feedback-data:
+secrets:
+  admin_password:
+    file: ${ADMIN_PASSWORD_FILE:-./secrets/admin_password}
+  jwt_secret:
+    file: ${JWT_SECRET_FILE:-./secrets/jwt_secret}

@@ -1,0 +1,7 @@
+.env
+secrets/
+data/
+*.secret
+web/node_modules/
+web/dist/
+server/server
