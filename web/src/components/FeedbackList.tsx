@@ -1,6 +1,10 @@
 import { ArrowDownUp, ArrowLeft, ArrowRight, ChevronDown, Clock3, Filter, MessageSquareText, Plus, Search, X } from 'lucide-react';
+import { useI18n } from '../i18n/context';
+import { categoryIcons, excerpt, statusKeys, statusStyle, useLabels } from '../lib/labels';
+import { useTheme } from '../theme/context';
 import type { Category, Feedback, Status } from '../types';
-import { ago, categories, excerpt, statusStyle, statusText } from '../lib/labels';
+import type { Palette } from '../theme/theme';
+import { ActionButton, Avatar } from './ui';
 
 type Props = {
   filter: Category | 'all';
@@ -21,72 +25,105 @@ type Props = {
   onCreate: () => void;
 };
 
+function categoryColor(palette: Palette, category: Category) {
+  if (category === 'bug') return palette.bug;
+  if (category === 'feature') return palette.feature;
+  return palette.question;
+}
+
+export function statusColors(palette: Palette, status: Status) {
+  const color = status === 'open' ? palette.open
+    : status === 'in_progress' ? palette.progress
+      : status === 'resolved' ? palette.resolved
+        : palette.closed;
+  return { color, borderColor: color, background: palette.raised };
+}
+
 export function FeedbackList({
   filter, shown, filteredCount, query, status, sort, page, pageSize, totalPages, loading,
   onQuery, onStatus, onSort, onPage, onOpen, onCreate,
 }: Props) {
-  const heading = filter === 'all' ? '全部反馈' : categories[filter].plural;
+  const { t } = useI18n();
+  const labels = useLabels();
+  const { palette } = useTheme();
+  const heading = filter === 'all' ? t('allFeedback') : labels.category(filter);
   const narrowed = Boolean(query) || status !== 'all';
   const start = shown.length ? (page - 1) * pageSize + 1 : 0;
+  const end = Math.min(page * pageSize, filteredCount);
+  const field = { color: palette.text, borderColor: palette.line, background: palette.field };
 
   return (
-    <section className="feed" aria-label="社区反馈">
+    <section className="feed" aria-label={t('feedLabel')}>
       <div className="feed-heading">
-        <div>
-          <div className="section-kicker"><span className="kicker-line" />社区讨论<span className="kicker-en">COMMUNITY LOG</span></div>
-          <h2>{heading}<span className="heading-count">{filteredCount.toString().padStart(2, '0')}</span></h2>
-        </div>
-        <button className="create-button" onClick={onCreate}><Plus size={17} />发布反馈</button>
+        <h2 style={{ color: palette.text }}>{heading}</h2>
+        <ActionButton onClick={onCreate}><Plus size={17} />{t('create')}</ActionButton>
       </div>
-      <div className="toolbar">
-        <label className="search-field">
+      <div className="toolbar" style={{ borderColor: palette.line }}>
+        <label className="search-field" style={field}>
           <Search size={16} />
-          <input aria-label="搜索反馈" placeholder="搜索反馈内容…" value={query} onChange={(event) => onQuery(event.target.value)} />
-          {query && <button aria-label="清空搜索" onClick={() => onQuery('')}><X size={13} /></button>}
+          <input aria-label={t('search')} placeholder={t('searchPlaceholder')} value={query} onChange={(event) => onQuery(event.target.value)} style={{ color: palette.text }} />
+          {query && <button aria-label={t('clearSearch')} onClick={() => onQuery('')} style={{ color: palette.muted }}><X size={13} /></button>}
         </label>
-        <label className="filter-select">
+        <label className="filter-select" style={field}>
           <Filter size={15} />
-          <select aria-label="按状态筛选" value={status} onChange={(event) => onStatus(event.target.value)}>
-            <option value="all">全部状态</option>
-            {(Object.keys(statusText) as Status[]).map((key) => <option key={key} value={key}>{statusText[key]}</option>)}
+          <select aria-label={t('filterStatus')} value={status} onChange={(event) => onStatus(event.target.value)} style={{ color: palette.text }}>
+            <option value="all">{t('allStatus')}</option>
+            {statusKeys.map((key) => <option key={key} value={key}>{labels.status(key)}</option>)}
           </select>
           <ChevronDown size={13} />
         </label>
-        <button className="sort-button" onClick={onSort}><ArrowDownUp size={14} />{sort === 'new' ? '最新优先' : '最早优先'}</button>
+        <button className="sort-button" onClick={onSort} style={{ color: palette.muted }}>
+          <ArrowDownUp size={14} />{sort === 'new' ? t('newest') : t('oldest')}
+        </button>
       </div>
-      <div className="list-header"><span>讨论 / ISSUE</span><span>状态</span><span>作者</span><span>时间</span></div>
+      <div className="list-header" style={{ color: palette.faint, borderColor: palette.line }}>
+        <span>{t('colIssue')}</span><span>{t('colStatus')}</span><span>{t('colAuthor')}</span><span>{t('colTime')}</span>
+      </div>
       <div className="feedback-list">
-        {loading ? <div className="empty-state"><span className="loading-dash" />正在载入反馈记录</div> : shown.length ? shown.map((item, index) => (
-          <article key={item.id} className="feedback-row" style={{ animationDelay: `${index * 36}ms` }}>
+        {loading ? <div className="empty-state" style={{ color: palette.muted }}><span className="loading-dash" style={{ background: palette.gold }} />{t('loading')}</div> : shown.length ? shown.map((item, index) => (
+          <article key={item.id} className="feedback-row" style={{ animationDelay: `${index * 36}ms`, borderColor: palette.line }}>
             <button className="row-main" onClick={() => onOpen(item)}>
-              <span className={`row-category cat-${item.category}`}>{categories[item.category].icon}<span>{categories[item.category].label} / {(item.categoryNumber ?? item.id).toString().padStart(3, '0')}</span></span>
-              <span className="row-title">{item.title}</span>
-              <span className="row-excerpt">{excerpt(item.body)}</span>
-              <span className="row-meta-mobile">
-                <span className={`status-pill ${statusStyle[item.status]}`}><i />{statusText[item.status]}</span>
-                <span>{item.author} · {ago(item.createdAt)}</span>
+              <span className={`row-category cat-${item.category}`} style={{ color: categoryColor(palette, item.category) }}>
+                {categoryIcons[item.category]}
+                <span>{labels.category(item.category)} / {(item.categoryNumber ?? item.id).toString().padStart(3, '0')}</span>
+              </span>
+              <span className="row-title" style={{ color: palette.text }}>{item.title}</span>
+              <span className="row-excerpt" style={{ color: palette.muted }}>{excerpt(item.body)}</span>
+              <span className="row-meta-mobile" style={{ color: palette.faint }}>
+                <span className={`status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</span>
+                <span>{item.author} · {labels.ago(item.createdAt)}</span>
               </span>
             </button>
-            <span className={`row-status status-pill ${statusStyle[item.status]}`}><i />{statusText[item.status]}</span>
-            <span className="row-author"><span className="author-avatar">{item.author.slice(0, 1).toUpperCase()}</span>{item.author}</span>
-            <span className="row-time"><Clock3 size={13} />{ago(item.createdAt)}</span>
-            <button className="row-arrow" aria-label={`查看：${item.title}`} onClick={() => onOpen(item)}><ArrowRight size={16} /></button>
+            <span className={`row-status status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</span>
+            <span className="row-author" style={{ color: palette.muted }}><Avatar name={item.author} />{item.author}</span>
+            <span className="row-time" style={{ color: palette.faint }}><Clock3 size={13} />{labels.ago(item.createdAt)}</span>
+            <button className="row-arrow" aria-label={t('viewItem', { title: item.title })} onClick={() => onOpen(item)} style={{ color: palette.faint }}><ArrowRight size={16} /></button>
           </article>
         )) : (
-          <div className="empty-state">
-            <div className="empty-glyph">{narrowed ? <Search size={21} /> : <MessageSquareText size={21} />}</div>
-            <strong>{narrowed ? '没有匹配的记录' : '这里还很安静'}</strong>
-            <span>{narrowed ? '换个关键词或状态试试。' : '发现第一处异常，或想到一项改进？把线索写下来。'}</span>
-            {!narrowed && <button onClick={onCreate}><Plus size={15} />添加第一条反馈</button>}
+          <div className="empty-state" style={{ color: palette.muted }}>
+            <div className="empty-glyph" style={{ color: palette.gold, borderColor: palette.line, background: palette.raised }}>
+              {narrowed ? <Search size={21} /> : <MessageSquareText size={21} />}
+            </div>
+            <strong style={{ color: palette.text }}>{narrowed ? t('noMatch') : t('quiet')}</strong>
+            <span style={{ color: palette.faint }}>{narrowed ? t('noMatchHint') : t('quietHint')}</span>
+            {!narrowed && (
+              <button onClick={onCreate} style={{ color: palette.goldInk, borderColor: palette.lineStrong, background: palette.raised }}>
+                <Plus size={15} />{t('firstItem')}
+              </button>
+            )}
           </div>
         )}
       </div>
-      <footer className="feed-footer">
-        <span>显示 <strong>{start}–{Math.min(page * pageSize, filteredCount)}</strong> 条，共 <strong>{filteredCount}</strong> 条记录</span>
-        <div className="pagination">
-          <button aria-label="上一页" disabled={page === 1} onClick={() => onPage(page - 1)}><ArrowLeft size={15} /></button>
+      <footer className="feed-footer" style={{ color: palette.faint }}>
+        <span>{t('range', { start, end, total: filteredCount })}</span>
+        <div className="pagination" style={{ color: palette.muted }}>
+          <button aria-label={t('prevPage')} disabled={page === 1} onClick={() => onPage(page - 1)} style={{ color: palette.text, borderColor: palette.line }}>
+            <ArrowLeft size={15} />
+          </button>
           <span>{page.toString().padStart(2, '0')} <i>/</i> {totalPages.toString().padStart(2, '0')}</span>
-          <button aria-label="下一页" disabled={page >= totalPages} onClick={() => onPage(page + 1)}><ArrowRight size={15} /></button>
+          <button aria-label={t('nextPage')} disabled={page >= totalPages} onClick={() => onPage(page + 1)} style={{ color: palette.text, borderColor: palette.line }}>
+            <ArrowRight size={15} />
+          </button>
         </div>
       </footer>
     </section>

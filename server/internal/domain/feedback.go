@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrLastMod = errors.New("cannot delete the last mod")
 
 const (
 	CategoryBug      = "bug"
@@ -11,10 +16,13 @@ const (
 	StatusInProgress = "in_progress"
 	StatusResolved   = "resolved"
 	StatusClosed     = "closed"
+
+	DefaultModSlug = "rhah"
 )
 
 type Feedback struct {
 	ID             int64     `json:"id"`
+	ModID          int64     `json:"modId"`
 	Category       string    `json:"category"`
 	CategoryNumber int64     `json:"categoryNumber"`
 	Title          string    `json:"title"`
@@ -36,6 +44,36 @@ type Credentials struct {
 type StatusUpdate struct {
 	Status string `json:"status"`
 }
+type FeedbackUpdate struct {
+	Title       string `json:"title"`
+	Body        string `json:"body"`
+	GameVersion string `json:"gameVersion"`
+	ModVersion  string `json:"modVersion"`
+	ModList     string `json:"modList"`
+	SaveLink    string `json:"saveLink"`
+}
+
+type SiteSettings struct {
+	ModVersion  string `json:"modVersion"`
+	GameVersion string `json:"gameVersion"`
+	Icon        string `json:"icon"`
+}
+type Mod struct {
+	ID          int64  `json:"id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	GameVersion string `json:"gameVersion"`
+	ModVersion  string `json:"modVersion"`
+	Icon        string `json:"icon"`
+}
+
+type ModInput struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	GameVersion string `json:"gameVersion"`
+	ModVersion  string `json:"modVersion"`
+	Icon        string `json:"icon"`
+}
 
 func ValidCategory(category string) bool {
 	switch category {
@@ -44,6 +82,28 @@ func ValidCategory(category string) bool {
 	default:
 		return false
 	}
+}
+
+func ValidIcon(icon string) bool {
+	switch icon {
+	case "squirrel", "rat", "bug", "spark", "shield", "paw":
+		return true
+	default:
+		return false
+	}
+}
+func ValidSlug(slug string) bool {
+	if len(slug) < 1 || len(slug) > 40 {
+		return false
+	}
+	for i := range len(slug) {
+		c := slug[i]
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' {
+			continue
+		}
+		return false
+	}
+	return slug[0] != '-' && slug[len(slug)-1] != '-'
 }
 
 func ValidStatus(status string) bool {

@@ -1,44 +1,65 @@
 import { Clipboard } from 'lucide-react';
-import type { Category } from '../types';
-import { categories, categoryKeys } from '../lib/labels';
+import { useI18n } from '../i18n/context';
+import { categoryIcons, categoryKeys, useLabels } from '../lib/labels';
+import { useTheme } from '../theme/context';
+import type { Category, Mod, SiteSettings } from '../types';
+import { siteIcons } from '../lib/icons';
+import { TextButton } from './ui';
 
 type Props = {
   filter: Category | 'all';
+  settings: SiteSettings;
+  mods: Mod[];
+  modSlug: string;
   count: (kind: Category | 'all') => number;
-  openCount: number;
   onFilter: (filter: Category | 'all') => void;
+  onMod: (slug: string) => void;
 };
 
-export function Sidebar({ filter, count, openCount, onFilter }: Props) {
+export function Sidebar({ filter, settings, mods, modSlug, count, onFilter, onMod }: Props) {
+  const { t } = useI18n();
+  const labels = useLabels();
+  const { palette } = useTheme();
+  const symbol = (key: Category | 'all') => {
+    if (key === 'bug') return palette.bug;
+    if (key === 'feature') return palette.feature;
+    if (key === 'question') return palette.question;
+    return palette.muted;
+  };
+  const active = mods.find((item) => item.slug === modSlug);
   return (
     <aside className="sidebar">
-      <div className="project-block">
-        <div className="project-eyebrow">MOD FEEDBACK / PLAYER NOTES</div>
-      </div>
-      <div className="side-rule" />
-      <div className="side-label">反馈板块</div>
-      <nav className="category-nav" aria-label="反馈分类">
-        <button className={`category-link ${filter === 'all' ? 'active' : ''}`} onClick={() => onFilter('all')}>
-          <span className="category-symbol"><Clipboard size={16} /></span>
-          <span>全部反馈</span>
-          <span className="category-count">{count('all')}</span>
-        </button>
-        {categoryKeys.map((key) => (
-          <button key={key} className={`category-link ${filter === key ? 'active' : ''}`} onClick={() => onFilter(key)}>
-            <span className={`category-symbol icon-${key}`}>{categories[key].icon}</span>
-            <span>{categories[key].label}</span>
-            <span className="category-count">{count(key)}</span>
-          </button>
+      <div className="side-label" style={{ color: palette.faint }}>{t('mods')}</div>
+      <nav className="category-nav mod-nav" aria-label={t('modsLabel')}>
+        {mods.map((mod) => (
+          <TextButton key={mod.slug} active={mod.slug === modSlug} onClick={() => onMod(mod.slug)}>
+            <span className="category-symbol" style={{ color: palette.gold }}>{siteIcons[mod.icon].icon}</span>
+            <span>{mod.name}</span>
+          </TextButton>
         ))}
       </nav>
-      <div className="side-rule lower-rule" />
+      <div className="side-rule" style={{ background: palette.line }} />
+      <div className="side-label" style={{ color: palette.faint }}>{t('boards')}</div>
+      <nav className="category-nav" aria-label={t('boardsLabel')}>
+        <TextButton active={filter === 'all'} onClick={() => onFilter('all')}>
+          <span className="category-symbol" style={{ color: symbol('all') }}><Clipboard size={16} /></span>
+          <span>{t('allFeedback')}</span>
+          <span className="category-count" style={{ color: filter === 'all' ? palette.gold : palette.faint }}>{count('all')}</span>
+        </TextButton>
+        {categoryKeys.map((key) => (
+          <TextButton key={key} active={filter === key} onClick={() => onFilter(key)}>
+            <span className={`category-symbol icon-${key}`} style={{ color: symbol(key) }}>{categoryIcons[key]}</span>
+            <span>{labels.category(key)}</span>
+            <span className="category-count" style={{ color: filter === key ? palette.gold : palette.faint }}>{count(key)}</span>
+          </TextButton>
+        ))}
+      </nav>
+      <div className="side-rule lower-rule" style={{ background: palette.line }} />
       <div className="field-notes">
-        <div className="notes-title"><span>野外记录</span><span className="notes-live"><i />LIVE</span></div>
-        <div className="note-row"><span>开放中的线索</span><strong>{openCount.toString().padStart(2, '0')}</strong></div>
-        <div className="note-row"><span>当前模组版本</span><strong>DEV BUILD</strong></div>
-        <div className="note-row"><span>游戏版本</span><strong>RIMWORLD 1.6</strong></div>
+        <div className="note-row" style={{ color: palette.faint }}><span>{t('currentMod')}</span><strong style={{ color: palette.muted }}>{active?.modVersion || settings.modVersion}</strong></div>
+        <div className="note-row" style={{ color: palette.faint }}><span>{t('gameVersion')}</span><strong style={{ color: palette.muted }}>{active?.gameVersion || settings.gameVersion}</strong></div>
       </div>
-      <div className="side-footer"><span>RHAH / COMMUNITY ARCHIVE</span><span>© 2026</span></div>
+      <div className="side-footer" style={{ color: palette.faint }}><span>{t('archive')}</span><span>© 2026</span></div>
     </aside>
   );
 }

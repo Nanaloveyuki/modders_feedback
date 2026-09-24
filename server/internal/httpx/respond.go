@@ -13,12 +13,12 @@ func Decode(w http.ResponseWriter, r *http.Request, target any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
-		Error(w, http.StatusBadRequest, "请求内容无效")
+		Error(w, http.StatusBadRequest, Text(r, "请求内容无效", "Invalid request body"))
 		return false
 	}
 	var extra any
 	if err := decoder.Decode(&extra); err != io.EOF {
-		Error(w, http.StatusBadRequest, "请求内容无效")
+		Error(w, http.StatusBadRequest, Text(r, "请求内容无效", "Invalid request body"))
 		return false
 	}
 	return true

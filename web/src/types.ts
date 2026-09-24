@@ -3,6 +3,7 @@ export type Status = 'open' | 'in_progress' | 'resolved' | 'closed';
 
 export type Feedback = {
   id: number;
+  modId?: number;
   category: Category;
   categoryNumber?: number;
   title: string;
@@ -26,4 +27,38 @@ export type FeedbackDraft = {
   modVersion: string;
   modList: string;
   saveLink: string;
+};
+
+export type SiteSettings = {
+  modVersion: string;
+  gameVersion: string;
+  icon: SiteIcon;
+};
+
+export type SiteIcon = 'squirrel' | 'rat' | 'bug' | 'spark' | 'shield' | 'paw';
+
+export type FeedbackUpdate = {
+  title: string;
+  body: string;
+  gameVersion: string;
+  modVersion: string;
+  modList: string;
+  saveLink: string;
+};
+
+export type Mod = {
+  id: number;
+  slug: string;
+  name: string;
+  gameVersion: string;
+  modVersion: string;
+  icon: SiteIcon;
+};
+
+export type ModInput = {
+  slug: string;
+  name: string;
+  gameVersion: string;
+  modVersion: string;
+  icon: SiteIcon;
 };

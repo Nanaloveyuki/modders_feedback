@@ -51,6 +51,19 @@ CREATE TABLE IF NOT EXISTS feedback (
  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
  created_at DATETIME NOT NULL
 );
+CREATE TABLE IF NOT EXISTS site_settings (
+ key TEXT PRIMARY KEY,
+ value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mods (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ slug TEXT NOT NULL UNIQUE,
+ name TEXT NOT NULL,
+ game_version TEXT NOT NULL DEFAULT '',
+ mod_version TEXT NOT NULL DEFAULT '',
+ icon TEXT NOT NULL DEFAULT 'squirrel',
+ sort_order INTEGER NOT NULL DEFAULT 0
+);
 CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 	if err != nil {
 		return err
@@ -58,8 +71,80 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 	if err = s.ensureCategoryNumber(); err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(category, category_number)`)
+	if err = s.ensureMods(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`)
 	return err
+}
+
+func (s *Store) ensureMods() error {
+	var column int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('feedback') WHERE name = 'mod_id'`).Scan(&column); err != nil {
+		return err
+	}
+	if column == 0 {
+		if _, err := s.db.Exec(`ALTER TABLE feedback ADD COLUMN mod_id INTEGER REFERENCES mods(id)`); err != nil {
+			return err
+		}
+		if _, err := s.db.Exec(`DROP INDEX IF EXISTS feedback_category_number`); err != nil {
+			return err
+		}
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var count int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM mods`).Scan(&count); err != nil {
+		return err
+	}
+	if count == 0 {
+		gameVersion, modVersion, icon := "RIMWORLD 1.6", "DEV BUILD", "squirrel"
+		rows, err := tx.Query(`SELECT key, value FROM site_settings`)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var key, value string
+			if err = rows.Scan(&key, &value); err != nil {
+				rows.Close()
+				return err
+			}
+			switch key {
+			case "game_version":
+				gameVersion = value
+			case "mod_version":
+				modVersion = value
+			case "icon":
+				if domain.ValidIcon(value) {
+					icon = value
+				}
+			}
+		}
+		if err = rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		if _, err = tx.Exec(
+			`INSERT INTO mods(slug, name, game_version, mod_version, icon, sort_order) VALUES(?,?,?,?,?,0)`,
+			domain.DefaultModSlug, "鼠族：饥与祸", gameVersion, modVersion, icon,
+		); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(`UPDATE feedback SET mod_id = (SELECT id FROM mods ORDER BY sort_order, id LIMIT 1) WHERE mod_id IS NULL`); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE feedback AS current SET category_number = (
+		SELECT COUNT(*) FROM feedback AS previous
+		WHERE previous.mod_id = current.mod_id AND previous.category = current.category AND previous.id <= current.id
+	) WHERE category_number IS NULL`); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ensureCategoryNumber() error {
@@ -105,6 +190,7 @@ func (s *Store) Authenticate(username, password string) (bool, error) {
 	var hash []byte
 	err := s.db.QueryRow("SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
 	if errors.Is(err, sql.ErrNoRows) {
+		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"), []byte(password))
 		return false, nil
 	}
 	if err != nil {
@@ -115,17 +201,17 @@ func (s *Store) Authenticate(username, password string) (bool, error) {
 	}
 	return true, nil
 }
-func (s *Store) ListFeedback(category string, limit, offset int) ([]domain.Feedback, error) {
+func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([]domain.Feedback, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	query := `SELECT id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`
-	args := []any{}
+	query := `SELECT id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ?`
+	args := []any{modID}
 	if category != "" {
-		query += " WHERE category = ?"
+		query += " AND category = ?"
 		args = append(args, category)
 	}
 	query += " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
@@ -138,7 +224,7 @@ func (s *Store) ListFeedback(category string, limit, offset int) ([]domain.Feedb
 	items := make([]domain.Feedback, 0, limit)
 	for rows.Next() {
 		var item domain.Feedback
-		if err := rows.Scan(&item.ID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -154,10 +240,10 @@ func (s *Store) CreateFeedback(item domain.Feedback) (domain.Feedback, error) {
 		return domain.Feedback{}, err
 	}
 	defer tx.Rollback()
-	if err = tx.QueryRow(`SELECT COALESCE(MAX(category_number), 0) + 1 FROM feedback WHERE category = ?`, item.Category).Scan(&item.CategoryNumber); err != nil {
+	if err = tx.QueryRow(`SELECT COALESCE(MAX(category_number), 0) + 1 FROM feedback WHERE mod_id = ? AND category = ?`, item.ModID, item.Category).Scan(&item.CategoryNumber); err != nil {
 		return domain.Feedback{}, err
 	}
-	result, err := tx.Exec(`INSERT INTO feedback(category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`, item.Category, item.CategoryNumber, item.Title, item.Body, item.Author, item.GameVersion, item.ModVersion, item.ModList, item.SaveLink, item.CreatedAt)
+	result, err := tx.Exec(`INSERT INTO feedback(mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, item.ModID, item.Category, item.CategoryNumber, item.Title, item.Body, item.Author, item.GameVersion, item.ModVersion, item.ModList, item.SaveLink, item.CreatedAt)
 	if err != nil {
 		return domain.Feedback{}, err
 	}
@@ -181,4 +267,186 @@ func (s *Store) UpdateStatus(id int64, status string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (s *Store) DeleteFeedback(id int64) (bool, error) {
+	result, err := s.db.Exec("DELETE FROM feedback WHERE id = ?", id)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *Store) UpdateFeedback(id int64, update domain.FeedbackUpdate) (domain.Feedback, bool, error) {
+	result, err := s.db.Exec(
+		`UPDATE feedback SET title = ?, body = ?, game_version = ?, mod_version = ?, mod_list = ?, save_link = ? WHERE id = ?`,
+		update.Title, update.Body, update.GameVersion, update.ModVersion, update.ModList, update.SaveLink, id,
+	)
+	if err != nil {
+		return domain.Feedback{}, false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return domain.Feedback{}, false, err
+	}
+	if count == 0 {
+		return domain.Feedback{}, false, nil
+	}
+	item, err := s.GetFeedback(id)
+	return item, true, err
+}
+
+func (s *Store) GetFeedback(id int64) (domain.Feedback, error) {
+	var item domain.Feedback
+	err := s.db.QueryRow(
+		`SELECT id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE id = ?`,
+		id,
+	).Scan(&item.ID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
+	return item, err
+}
+
+func (s *Store) SiteSettings() (domain.SiteSettings, error) {
+	settings := domain.SiteSettings{ModVersion: "DEV BUILD", GameVersion: "RIMWORLD 1.6", Icon: "squirrel"}
+	rows, err := s.db.Query(`SELECT key, value FROM site_settings`)
+	if err != nil {
+		return settings, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return settings, err
+		}
+		switch key {
+		case "mod_version":
+			settings.ModVersion = value
+		case "game_version":
+			settings.GameVersion = value
+		case "icon":
+			settings.Icon = value
+		}
+	}
+	return settings, rows.Err()
+}
+
+func (s *Store) UpdateSiteSettings(settings domain.SiteSettings) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	pairs := [][2]string{
+		{"mod_version", settings.ModVersion},
+		{"game_version", settings.GameVersion},
+		{"icon", settings.Icon},
+	}
+	for _, pair := range pairs {
+		if _, err = tx.Exec(`INSERT INTO site_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, pair[0], pair[1]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListMods() ([]domain.Mod, error) {
+	rows, err := s.db.Query(`SELECT id, slug, name, game_version, mod_version, icon FROM mods ORDER BY sort_order, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	mods := make([]domain.Mod, 0)
+	for rows.Next() {
+		var item domain.Mod
+		if err := rows.Scan(&item.ID, &item.Slug, &item.Name, &item.GameVersion, &item.ModVersion, &item.Icon); err != nil {
+			return nil, err
+		}
+		mods = append(mods, item)
+	}
+	return mods, rows.Err()
+}
+
+func (s *Store) ModBySlug(slug string) (domain.Mod, error) {
+	var item domain.Mod
+	err := s.db.QueryRow(
+		`SELECT id, slug, name, game_version, mod_version, icon FROM mods WHERE slug = ?`,
+		slug,
+	).Scan(&item.ID, &item.Slug, &item.Name, &item.GameVersion, &item.ModVersion, &item.Icon)
+	return item, err
+}
+
+func (s *Store) CreateMod(input domain.ModInput) (domain.Mod, error) {
+	result, err := s.db.Exec(
+		`INSERT INTO mods(slug, name, game_version, mod_version, icon, sort_order) VALUES(?,?,?,?,?,(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM mods))`,
+		input.Slug, input.Name, input.GameVersion, input.ModVersion, input.Icon,
+	)
+	if err != nil {
+		return domain.Mod{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return domain.Mod{}, err
+	}
+	return domain.Mod{ID: id, Slug: input.Slug, Name: input.Name, GameVersion: input.GameVersion, ModVersion: input.ModVersion, Icon: input.Icon}, nil
+}
+
+func (s *Store) UpdateMod(id int64, input domain.ModInput) (domain.Mod, bool, error) {
+	result, err := s.db.Exec(
+		`UPDATE mods SET slug = ?, name = ?, game_version = ?, mod_version = ?, icon = ? WHERE id = ?`,
+		input.Slug, input.Name, input.GameVersion, input.ModVersion, input.Icon, id,
+	)
+	if err != nil {
+		return domain.Mod{}, false, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return domain.Mod{}, false, err
+	}
+	if count == 0 {
+		return domain.Mod{}, false, nil
+	}
+	return domain.Mod{ID: id, Slug: input.Slug, Name: input.Name, GameVersion: input.GameVersion, ModVersion: input.ModVersion, Icon: input.Icon}, true, nil
+}
+
+func (s *Store) DeleteMod(id int64) (bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var exists int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM mods WHERE id = ?`, id).Scan(&exists); err != nil {
+		return false, err
+	}
+	if exists == 0 {
+		return false, nil
+	}
+	var count int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM mods`).Scan(&count); err != nil {
+		return false, err
+	}
+	if count < 2 {
+		return false, domain.ErrLastMod
+	}
+	if _, err = tx.Exec(`DELETE FROM feedback WHERE mod_id = ?`, id); err != nil {
+		return false, err
+	}
+	result, err := tx.Exec(`DELETE FROM mods WHERE id = ?`, id)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if affected == 0 {
+		return false, nil
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
+	}
+	return true, nil
 }

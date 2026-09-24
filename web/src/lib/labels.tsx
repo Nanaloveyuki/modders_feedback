@@ -1,19 +1,18 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle, CircleHelp, Sparkles } from 'lucide-react';
+import { localeTag, useI18n } from '../i18n/context';
+import type { MessageKey } from '../i18n/messages';
 import type { Category, Status } from '../types';
 
-export const categories: Record<Category, { label: string; plural: string; icon: ReactNode }> = {
-  bug: { label: '错误报告', plural: '错误报告', icon: <AlertTriangle size={15} /> },
-  feature: { label: '功能建议', plural: '功能建议', icon: <Sparkles size={15} /> },
-  question: { label: '一般提问', plural: '一般提问', icon: <CircleHelp size={15} /> },
+export const categoryIcons: Record<Category, ReactNode> = {
+  bug: <AlertTriangle size={15} />,
+  feature: <Sparkles size={15} />,
+  question: <CircleHelp size={15} />,
 };
 
-export const statusText: Record<Status, string> = {
-  open: '待处理',
-  in_progress: '处理中',
-  resolved: '已解决',
-  closed: '已关闭',
-};
+export const categoryKeys = Object.keys(categoryIcons) as Category[];
+
+export const statusKeys: Status[] = ['open', 'in_progress', 'resolved', 'closed'];
 
 export const statusStyle: Record<Status, string> = {
   open: 'status-open',
@@ -22,14 +21,22 @@ export const statusStyle: Record<Status, string> = {
   closed: 'status-closed',
 };
 
-export const categoryKeys = Object.keys(categories) as Category[];
-
-export function ago(date: string) {
-  const hours = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 3600000));
-  if (hours < 1) return '刚刚';
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.floor(hours / 24);
-  return days < 30 ? `${days} 天前` : new Date(date).toLocaleDateString('zh-CN');
+export function useLabels() {
+  const { locale, t } = useI18n();
+  return {
+    category: (key: Category) => t(key),
+    status: (key: Status) => t(key as MessageKey),
+    ago(date: string) {
+      const hours = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 3600000));
+      if (hours < 1) return t('justNow');
+      if (hours < 24) return t('hoursAgo', { count: hours });
+      const days = Math.floor(hours / 24);
+      return days < 30 ? t('daysAgo', { count: days }) : new Date(date).toLocaleDateString(localeTag(locale));
+    },
+    dateTime(date: string) {
+      return new Date(date).toLocaleString(localeTag(locale));
+    },
+  };
 }
 
 export function excerpt(body: string) {

@@ -10,7 +10,7 @@ The product has three feedback categories:
 - `feature`: feature requests
 - `question`: general questions
 
-Visitors can browse, search, filter, sort, and inspect feedback. The only write-capable account is the maintainer account seeded from deployment secrets. There is no public registration flow. Authenticated users can create feedback and update its status.
+Visitors can browse, search, filter, sort, and inspect feedback. The only write-capable account is the administrator account seeded from deployment secrets. There is no public registration flow. Authenticated users can create feedback, update its status, edit its content, delete it, and change the displayed site versions and icon.
 
 ## Architecture
 
@@ -62,8 +62,8 @@ The API must run separately for development:
 ```sh
 cd server
 DATA_DIR=../data \
-ADMIN_USERNAME=maintainer \
-ADMIN_PASSWORD='local-password-at-least-12' \
+ADMIN_USERNAME=admin \
+ADMIN_PASSWORD='admin123456_' \
 JWT_SECRET='local-random-secret-at-least-32-characters' \
 go run ./cmd/feedback
 ```
@@ -87,10 +87,15 @@ Important API behavior:
 - `POST /api/auth/login` sets the session cookie.
 - `POST /api/auth/logout` clears the session cookie.
 - `GET /api/auth/me` requires a valid session.
-- `GET /api/feedback` is public; optional `?category=bug|feature|question` filtering is supported.
-- `POST /api/feedback` requires authentication.
+- `GET /api/feedback` is public; optional `?category=bug|feature|question` and `?mod=<slug>` filtering are supported. An omitted `mod` uses `rhah`.
+- `POST /api/feedback` requires authentication and stores the item on the `mod` query slug.
+- `PATCH /api/feedback/{id}` requires authentication and updates title, body, versions, mod list, and save link.
 - `PATCH /api/feedback/{id}/status` requires authentication.
-- API JSON bodies are capped at 1 MiB and reject unknown fields.
+- `DELETE /api/feedback/{id}` requires authentication.
+- `GET /api/mods` is public and returns the selectable feedback mods.
+- `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require authentication. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
+- `GET /api/settings` is public and returns the displayed mod version, game version, and icon.
+- `PUT /api/settings` requires authentication.
 
 ## Docker Deployment
 
@@ -98,12 +103,12 @@ Create local secrets before the first Compose start:
 
 ```sh
 mkdir -p secrets
-printf '%s' 'choose-a-private-password-at-least-12-characters' > secrets/admin_password
+printf '%s' 'admin123456_' > secrets/admin_password
 openssl rand -hex 32 > secrets/jwt_secret
 docker compose up --build -d
 ```
 
-Replace the example admin password before use. The password must be at least 12 characters. `JWT_SECRET` must be at least 32 characters. The default username is `maintainer`; override it with `ADMIN_USERNAME`.
+The example admin password is `admin123456_`. It must be at least 12 characters. `JWT_SECRET` must be at least 32 characters. The default username is `admin`; override it with `ADMIN_USERNAME`.
 
 Open `http://localhost:8080`. Useful commands:
 
@@ -168,7 +173,7 @@ After code changes:
 3. Start the service or Compose stack.
 4. Check `GET /api/health`.
 5. Verify anonymous feedback creation returns `401`.
-6. Log in with the configured maintainer account.
+6. Log in with the configured administrator account.
 7. Create one feedback item and verify its author/category.
 8. Update its status and read it back from `GET /api/feedback`.
 9. Verify the frontend HTML and its JavaScript asset load.

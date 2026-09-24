@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { Clipboard, ExternalLink, X } from 'lucide-react';
+import { useI18n } from '../i18n/context';
+import { categoryIcons, statusKeys, statusStyle, useLabels } from '../lib/labels';
+import { useTheme } from '../theme/context';
 import type { Feedback, Status } from '../types';
-import { categories, statusStyle, statusText } from '../lib/labels';
+import { statusColors } from './FeedbackList';
+import { Avatar, IconButton, Panel, Scrim } from './ui';
 
 type Props = {
   item: Feedback;
@@ -11,6 +15,10 @@ type Props = {
 };
 
 export function Detail({ item, loggedIn, onClose, onStatus }: Props) {
+  const { t } = useI18n();
+  const labels = useLabels();
+  const { palette } = useTheme();
+  const categoryColor = item.category === 'bug' ? palette.bug : item.category === 'feature' ? palette.feature : palette.question;
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -20,43 +28,49 @@ export function Detail({ item, loggedIn, onClose, onStatus }: Props) {
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <article className="modal-panel detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+    <Scrim onClose={onClose}>
+      <Panel className="detail-panel" labelledBy="detail-title">
         <div className="detail-top">
-          <span className={`row-category cat-${item.category}`}>{categories[item.category].icon}<span>{categories[item.category].label}</span></span>
-          <button className="icon-button" aria-label="关闭" onClick={onClose}><X size={18} /></button>
+          <span className={`row-category cat-${item.category}`} style={{ color: categoryColor }}>
+            {categoryIcons[item.category]}<span>{labels.category(item.category)}</span>
+          </span>
+          <IconButton label={t('close')} onClick={onClose}><X size={18} /></IconButton>
         </div>
-        <h2 id="detail-title" className="detail-title">{item.title}</h2>
-        <div className="detail-byline">
-          <span className="author-avatar">{item.author.slice(0, 1).toUpperCase()}</span>
-          <strong>{item.author}</strong>
+        <h2 id="detail-title" className="detail-title" style={{ color: palette.text }}>{item.title}</h2>
+        <div className="detail-byline" style={{ color: palette.faint }}>
+          <Avatar name={item.author} />
+          <strong style={{ color: palette.text }}>{item.author}</strong>
           <span>·</span>
-          <span>{new Date(item.createdAt).toLocaleString('zh-CN')}</span>
+          <span>{labels.dateTime(item.createdAt)}</span>
         </div>
-        <div className="detail-body">{item.body}</div>
-        <div className="detail-facts">
-          <div><span>RIMWORLD</span><strong>{item.gameVersion || '未提供'}</strong></div>
-          <div><span>MOD VERSION</span><strong>{item.modVersion || '未提供'}</strong></div>
-          <div><span>STATUS</span><strong className={`status-pill ${statusStyle[item.status]}`}><i />{statusText[item.status]}</strong></div>
+        <div className="detail-body" style={{ color: palette.text }}>{item.body}</div>
+        <div className="detail-facts" style={{ borderColor: palette.line }}>
+          <div><span style={{ color: palette.faint }}>RIMWORLD</span><strong style={{ color: palette.muted }}>{item.gameVersion || t('missing')}</strong></div>
+          <div><span style={{ color: palette.faint }}>MOD VERSION</span><strong style={{ color: palette.muted }}>{item.modVersion || t('missing')}</strong></div>
+          <div><span style={{ color: palette.faint }}>STATUS</span><strong className={`status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</strong></div>
         </div>
-        {item.modList && <div className="detail-extra"><h3>相关模组 / 加载顺序</h3><pre>{item.modList}</pre></div>}
-        {item.saveLink && <a className="save-link" href={item.saveLink} target="_blank" rel="noreferrer"><ExternalLink size={14} />打开存档分享链接</a>}
+        {item.modList && (
+          <div className="detail-extra">
+            <h3 style={{ color: palette.faint }}>{t('extraMods')}</h3>
+            <pre style={{ color: palette.text, background: palette.field }}>{item.modList}</pre>
+          </div>
+        )}
+        {item.saveLink && <a className="save-link" href={item.saveLink} target="_blank" rel="noreferrer" style={{ color: palette.gold }}><ExternalLink size={14} />{t('openSave')}</a>}
         {loggedIn && (
-          <label className="status-editor">
-            更新处理状态
-            <select value={item.status} onChange={(event) => void onStatus(item, event.target.value as Status)}>
-              <option value="open">待处理</option>
-              <option value="in_progress">处理中</option>
-              <option value="resolved">已解决</option>
-              <option value="closed">已关闭</option>
+          <label className="status-editor" style={{ color: palette.muted }}>
+            {t('updateStatus')}
+            <select value={item.status} onChange={(event) => void onStatus(item, event.target.value as Status)} style={{ color: palette.text, background: palette.field, borderColor: palette.line }}>
+              {statusKeys.map((key) => <option key={key} value={key}>{labels.status(key)}</option>)}
             </select>
           </label>
         )}
-        <div className="detail-bottom">
+        <div className="detail-bottom" style={{ borderColor: palette.line, color: palette.faint }}>
           <span>ISSUE / {String(item.id).padStart(4, '0')}</span>
-          <button onClick={() => { void navigator.clipboard?.writeText(window.location.href); }}><Clipboard size={14} />复制页面地址</button>
+          <button onClick={() => { void navigator.clipboard?.writeText(window.location.href); }} style={{ color: palette.gold }}>
+            <Clipboard size={14} />{t('copyAddress')}
+          </button>
         </div>
-      </article>
-    </div>
+      </Panel>
+    </Scrim>
   );
 }

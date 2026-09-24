@@ -1,30 +1,66 @@
-import { ExternalLink, Github, LockKeyhole, LogOut, Moon, Sun, Squirrel } from 'lucide-react';
-import type { User } from '../types';
+import { ExternalLink, Github, LockKeyhole, LogOut, Moon, Settings, Sun } from 'lucide-react';
+import { nextLocale, useI18n } from '../i18n/context';
+import { siteIcons } from '../lib/icons';
+import { useTheme } from '../theme/context';
+import type { SiteIcon, User } from '../types';
+import { IconButton } from './ui';
 
 type Props = {
   user: User | null;
-  theme: 'light' | 'dark';
-  onThemeChange: () => void;
+  icon: SiteIcon;
+  name?: string;
   onLogin: () => void;
   onLogout: () => void;
+  onAdmin: () => void;
 };
 
-export function Topbar({ user, theme, onThemeChange, onLogin, onLogout }: Props) {
+export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) {
+  const { locale, setLocale, t } = useI18n();
+  const { dark, palette, toggle } = useTheme();
+  const themeLabel = dark ? t('themeToLight') : t('themeToDark');
   return (
-    <header className="topbar">
-      <a className="brand" href="#top" aria-label="鼠族：饥与祸反馈站首页">
-        <span className="brand-mark"><Squirrel size={22} strokeWidth={1.8} /></span>
-        <span className="brand-name">鼠族<span>：</span>饥与祸<small>社区反馈站</small></span>
+    <header className="topbar" style={{ background: palette.bar, borderColor: palette.line, color: palette.muted }}>
+      <a className="brand" href="#top" aria-label={t('brandHome')}>
+        <span className="brand-mark" style={{ color: palette.gold, borderColor: palette.lineStrong, background: palette.raised }}>
+          {siteIcons[icon].icon}
+        </span>
+        <span className="brand-name" style={{ color: palette.text }}>
+          {name ?? (locale === 'zh' ? <>鼠族<span style={{ color: palette.gold }}>：</span>饥与祸</> : <>Ratkin<span style={{ color: palette.gold }}>:</span> Hunger and Havoc</>)}
+          <small style={{ color: palette.faint }}>{t('brandSmall')}</small>
+        </span>
       </a>
-      <nav className="top-links" aria-label="模组信息">
-        <span className="build-tag"><span className="live-dot" />RIMWORLD 1.6</span>
-        <span className="nav-divider" />
-        <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=" target="_blank" rel="noreferrer">Steam 创意工坊 <ExternalLink size={13} /></a>
-        <a href="https://github.com/" target="_blank" rel="noreferrer" aria-label="项目主页"><Github size={15} /></a>
+      <nav className="top-links" aria-label={t('navLabel')} style={{ color: palette.muted }}>
+        <span className="build-tag" style={{ color: palette.gold }}>
+          <span className="live-dot" style={{ background: palette.gold, boxShadow: `0 0 11px ${palette.gold}` }} />
+          RIMWORLD 1.6
+        </span>
+        <span className="nav-divider" style={{ background: palette.line }} />
+        <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=" target="_blank" rel="noreferrer">{t('workshop')} <ExternalLink size={13} /></a>
+        <a href="https://github.com/Nanaloveyuki/modders_feedback" target="_blank" rel="noreferrer" aria-label={t('projectHome')}><Github size={15} /></a>
       </nav>
-      <div className="account-area">
-        <button className="icon-button theme-toggle" title={theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'} aria-label={theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'} onClick={onThemeChange}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
-        {user ? <><span className="user-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user.username}</span><button className="icon-button" title="退出登录" onClick={onLogout}><LogOut size={17} /></button></> : <button className="login-button" onClick={onLogin}><LockKeyhole size={14} /> 登录</button>}
+      <div className="account-area" style={{ color: palette.muted }}>
+        <button
+          className="lang-toggle"
+          aria-label={t('language')}
+          style={{ color: palette.text, borderColor: palette.line, background: 'transparent' }}
+          onClick={() => setLocale(nextLocale(locale))}
+        >
+          {locale === 'zh' ? 'EN' : '中文'}
+        </button>
+        <IconButton className="theme-toggle" label={themeLabel} tone="gold" onClick={toggle}>
+          {dark ? <Sun size={17} /> : <Moon size={17} />}
+        </IconButton>
+        {user ? (
+          <>
+            <IconButton label={t('adminOpen')} tone="gold" onClick={onAdmin}><Settings size={17} /></IconButton>
+            <span className="user-avatar" style={{ color: palette.goldInk, background: palette.raised }}>{user.username.slice(0, 1).toUpperCase()}</span>
+            <span className="account-name">{user.username}</span>
+          </>
+        ) : (
+          <button className="login-button" style={{ color: palette.text, borderColor: palette.line, background: 'transparent' }} onClick={onLogin}>
+            <LockKeyhole size={14} /> {t('login')}
+          </button>
+        )}
       </div>
     </header>
   );

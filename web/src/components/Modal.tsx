@@ -1,14 +1,20 @@
 import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '../i18n/context';
+import { useTheme } from '../theme/context';
+import { IconButton, Panel, Scrim } from './ui';
 
 type Props = {
   title: string;
   subtitle: string;
+  wide?: boolean;
   onClose: () => void;
   children: ReactNode;
 };
 
-export function Modal({ title, subtitle, onClose, children }: Props) {
+export function Modal({ title, subtitle, wide = false, onClose, children }: Props) {
+  const { t } = useI18n();
+  const { palette } = useTheme();
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -18,18 +24,18 @@ export function Modal({ title, subtitle, onClose, children }: Props) {
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        <div className="modal-heading">
+    <Scrim onClose={onClose}>
+      <Panel className={wide ? 'admin-modal' : undefined} labelledBy="modal-title">
+        <div className="modal-heading" style={{ borderColor: palette.line }}>
           <div>
-            <div className="modal-kicker">RHAH / FIELD NOTES</div>
-            <h2 id="modal-title">{title}</h2>
-            <p>{subtitle}</p>
+            <div className="modal-kicker" style={{ color: palette.gold }}>{t('modalKicker')}</div>
+            <h2 id="modal-title" style={{ color: palette.text }}>{title}</h2>
+            {subtitle && <p style={{ color: palette.muted }}>{subtitle}</p>}
           </div>
-          <button className="icon-button close-button" onClick={onClose} aria-label="关闭"><X size={19} /></button>
+          <IconButton className="close-button" label={t('close')} onClick={onClose}><X size={19} /></IconButton>
         </div>
         {children}
-      </section>
-    </div>
+      </Panel>
+    </Scrim>
   );
 }

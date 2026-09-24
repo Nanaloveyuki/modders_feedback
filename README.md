@@ -10,12 +10,12 @@ For first run, create two local secret files (the `secrets/` directory is ignore
 
 ```sh
 mkdir -p secrets
-printf '%s' 'choose-a-private-password-at-least-12-characters' > secrets/admin_password
+printf '%s' 'admin123456_' > secrets/admin_password
 openssl rand -hex 32 > secrets/jwt_secret
 docker compose up --build -d
 ```
 
-Copy or replace the example value in `secrets/admin_password` with a password you can share with testers; it must contain at least 12 characters. `jwt_secret` must contain at least 32 characters. Never commit the secret files. Set `FEEDBACK_PORT` to change the published port; `ADMIN_USERNAME` defaults to `maintainer`.
+Copy or replace the example value in `secrets/admin_password` before exposing the site; it must contain at least 12 characters. `jwt_secret` must contain at least 32 characters. Never commit the secret files. Set `FEEDBACK_PORT` to change the published port; `ADMIN_USERNAME` defaults to `admin` and the example password is `admin123456_`.
 
 Open `http://localhost:8080`. The initial administrator account is seeded on the first start. For internet-facing deployments, terminate HTTPS at a trusted reverse proxy and set `COOKIE_SECURE=true`. Back up the named `feedback-data` volume regularly.
 
@@ -31,10 +31,10 @@ docker compose down
 
 ## Feedback workflow
 
-The board has bug reports, feature requests, and general questions. Signed-in users can create feedback; visitors can read and filter posts. Bug reports include optional RimWorld version, mod version, mod list/load order, and save-share URL fields. The account supplied in the environment is the only account; registration is disabled. A signed-in user can update feedback status.
+The board has bug reports, feature requests, and general questions. Signed-in users can create feedback; visitors can read and filter posts. Bug reports include optional RimWorld version, mod version, mod list/load order, and save-share URL fields. The account supplied in the environment is the only account; registration is disabled. A signed-in administrator can update feedback status, edit title, body, versions, mod list, and save link, delete a record, and change the displayed mod version, game version, and site icon.
 
 SQLite is created at `/data/feedback.db`; the Compose configuration persists `/data` in the `feedback-data` volume. `GET /api/health` is available for monitoring.
 
 ## Local development
 
-The web app runs with Vite and proxies `/api` to the Go service during development. Build the frontend with `cd web && npm ci && npm run build`. Start the API from the `server/` directory with `DATA_DIR=../data ADMIN_USERNAME=maintainer ADMIN_PASSWORD='local-password-at-least-12' JWT_SECRET='local-random-secret-at-least-32-characters' go run ./cmd/feedback`; it serves the built `web/dist` files when started there. For Vite hot reload, run `npm run dev` from `web/` in a second terminal.
+The web app runs with Vite and proxies `/api` to the Go service during development. Build the frontend with `cd web && npm ci && npm run build`. Start the API from the `server/` directory with `DATA_DIR=../data ADMIN_USERNAME=admin ADMIN_PASSWORD='admin123456_' JWT_SECRET='local-random-secret-at-least-32-characters' go run ./cmd/feedback`; it serves the built `web/dist` files when started there. For Vite hot reload, run `npm run dev` from `web/` in a second terminal.

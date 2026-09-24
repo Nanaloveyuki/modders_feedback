@@ -1,31 +1,36 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { useI18n } from '../i18n/context';
+import type { MessageKey } from '../i18n/messages';
+import { categoryIcons, categoryKeys } from '../lib/labels';
+import { useTheme } from '../theme/context';
 import type { Category, FeedbackDraft } from '../types';
-import { categories, categoryKeys } from '../lib/labels';
+import type { Palette } from '../theme/theme';
+import { ActionButton, Field } from './ui';
 
 type Props = {
   onSubmit: (data: FeedbackDraft) => Promise<void>;
 };
 
-const placeholders: Record<Category, { title: string; body: string }> = {
-  bug: {
-    title: '例如：冬季事件触发后殖民者状态异常',
-    body: '发生了什么？预期结果是什么？请按步骤说明复现过程。',
-  },
-  feature: {
-    title: '描述你希望增加或调整的内容',
-    body: '目前的使用场景是什么？你希望它如何工作？',
-  },
-  question: {
-    title: '用一句话概括你的问题',
-    body: '提供相关背景信息，方便我们准确回答。',
-  },
+const placeholderKeys: Record<Category, { title: MessageKey; body: MessageKey }> = {
+  bug: { title: 'bugTitle', body: 'bugBody' },
+  feature: { title: 'featureTitle', body: 'featureBody' },
+  question: { title: 'questionTitle', body: 'questionBody' },
 };
 
+function categoryColor(palette: Palette, category: Category) {
+  if (category === 'bug') return palette.bug;
+  if (category === 'feature') return palette.feature;
+  return palette.question;
+}
+
 export function FeedbackForm({ onSubmit }: Props) {
+  const { t } = useI18n();
+  const { palette } = useTheme();
   const [category, setCategory] = useState<Category>('bug');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const control = { color: palette.text, background: palette.field, borderColor: palette.line };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +49,7 @@ export function FeedbackForm({ onSubmit }: Props) {
     try {
       await onSubmit(data);
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : '提交失败');
+      setError(problem instanceof Error ? problem.message : t('submitFailed'));
     } finally {
       setPending(false);
     }
@@ -53,27 +58,40 @@ export function FeedbackForm({ onSubmit }: Props) {
   return (
     <form className="form-stack feedback-form" onSubmit={handleSubmit}>
       <fieldset className="category-picker">
-        <legend>反馈类型</legend>
-        {categoryKeys.map((key) => (
-          <button type="button" key={key} className={category === key ? `picked picked-${key}` : ''} onClick={() => setCategory(key)}>
-            {categories[key].icon}{categories[key].label}
-          </button>
-        ))}
+        <legend style={{ color: palette.muted }}>{t('feedbackType')}</legend>
+        {categoryKeys.map((key) => {
+          const picked = category === key;
+          return (
+            <button
+              type="button"
+              key={key}
+              className={picked ? `picked picked-${key}` : ''}
+              onClick={() => setCategory(key)}
+              style={{
+                color: picked ? palette.activeInk : palette.muted,
+                background: picked ? palette.active : palette.field,
+                borderColor: picked ? categoryColor(palette, key) : palette.line,
+              }}
+            >
+              <span style={{ color: categoryColor(palette, key) }}>{categoryIcons[key]}</span>{t(key)}
+            </button>
+          );
+        })}
       </fieldset>
-      <label>标题<input name="title" required minLength={5} maxLength={120} placeholder={placeholders[category].title} /></label>
-      <label>详细描述<textarea name="body" required minLength={10} maxLength={12000} rows={5} placeholder={placeholders[category].body} /></label>
+      <Field label={t('title')}><input name="title" required minLength={5} maxLength={120} placeholder={t(placeholderKeys[category].title)} style={control} /></Field>
+      <Field label={t('description')}><textarea name="body" required minLength={10} maxLength={12000} rows={5} placeholder={t(placeholderKeys[category].body)} style={control} /></Field>
       <div className="form-two">
-        <label>游戏版本<input name="gameVersion" maxLength={40} defaultValue="RimWorld 1.6" /></label>
-        <label>模组版本<input name="modVersion" maxLength={80} placeholder="例如：0.8.2" /></label>
+        <Field label={t('gameVersionField')}><input name="gameVersion" maxLength={40} defaultValue="RimWorld 1.6" style={control} /></Field>
+        <Field label={t('modVersion')}><input name="modVersion" maxLength={80} placeholder={t('modVersionPlaceholder')} style={control} /></Field>
       </div>
       {category === 'bug' && (
         <>
-          <label>相关模组 / 加载顺序<textarea name="modList" maxLength={6000} rows={2} placeholder="粘贴可能相关的模组和加载顺序（选填）" /></label>
-          <label>存档分享链接<input name="saveLink" type="url" maxLength={500} placeholder="https://…（选填，请勿填写私密链接）" /></label>
+          <Field label={t('modList')}><textarea name="modList" maxLength={6000} rows={2} placeholder={t('modListPlaceholder')} style={control} /></Field>
+          <Field label={t('saveLink')}><input name="saveLink" type="url" maxLength={500} placeholder={t('saveLinkPlaceholder')} style={control} /></Field>
         </>
       )}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <button className="form-submit" disabled={pending}>{pending ? '正在发布…' : '发布反馈'}<ArrowRight size={16} /></button>
+      {error && <p className="form-error" role="alert" style={{ color: palette.danger }}>{error}</p>}
+      <ActionButton className="form-submit" disabled={pending}>{pending ? t('publishing') : t('create')}<ArrowRight size={16} /></ActionButton>
     </form>
   );
 }
