@@ -35,7 +35,8 @@ export function statusColors(palette: Palette, status: Status) {
   const color = status === 'open' ? palette.open
     : status === 'in_progress' ? palette.progress
       : status === 'resolved' ? palette.resolved
-        : palette.closed;
+        : status === 'withdrawn' ? palette.danger
+          : palette.closed;
   return { color, borderColor: color, background: palette.raised };
 }
 

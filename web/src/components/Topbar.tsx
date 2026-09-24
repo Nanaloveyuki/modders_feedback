@@ -52,9 +52,10 @@ export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) 
         </IconButton>
         {user ? (
           <>
-            <IconButton label={t('adminOpen')} tone="gold" onClick={onAdmin}><Settings size={17} /></IconButton>
+            {user.role === 'admin' && <IconButton label={t('adminOpen')} tone="gold" onClick={onAdmin}><Settings size={17} /></IconButton>}
             <span className="user-avatar" style={{ color: palette.goldInk, background: palette.raised }}>{user.username.slice(0, 1).toUpperCase()}</span>
             <span className="account-name">{user.username}</span>
+            <IconButton label={t('logout')} onClick={onLogout}><LogOut size={16} /></IconButton>
           </>
         ) : (
           <button className="login-button" style={{ color: palette.text, borderColor: palette.line, background: 'transparent' }} onClick={onLogin}>

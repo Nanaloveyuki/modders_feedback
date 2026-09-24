@@ -1,5 +1,5 @@
 export type Category = 'bug' | 'feature' | 'question';
-export type Status = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type Status = 'open' | 'in_progress' | 'resolved' | 'closed' | 'withdrawn';
 
 export type Feedback = {
   id: number;
@@ -17,7 +17,7 @@ export type Feedback = {
   createdAt: string;
 };
 
-export type User = { username: string };
+export type User = { username: string; role: 'admin' | 'member' };
 
 export type FeedbackDraft = {
   category: Category;

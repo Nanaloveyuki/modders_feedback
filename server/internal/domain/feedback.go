@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-var ErrLastMod = errors.New("cannot delete the last mod")
+var (
+	ErrLastMod       = errors.New("cannot delete the last mod")
+	ErrUsernameTaken = errors.New("username already exists")
+)
 
 const (
 	CategoryBug      = "bug"
@@ -16,6 +19,7 @@ const (
 	StatusInProgress = "in_progress"
 	StatusResolved   = "resolved"
 	StatusClosed     = "closed"
+	StatusWithdrawn  = "withdrawn"
 
 	DefaultModSlug = "rhah"
 )
@@ -39,6 +43,18 @@ type Feedback struct {
 type Credentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+type Registration struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
+	QQ       string `json:"qq"`
+}
+
+type User struct {
+	Username string `json:"username"`
+	Role     string `json:"role"`
 }
 
 type StatusUpdate struct {
@@ -108,7 +124,7 @@ func ValidSlug(slug string) bool {
 
 func ValidStatus(status string) bool {
 	switch status {
-	case StatusOpen, StatusInProgress, StatusResolved, StatusClosed:
+	case StatusOpen, StatusInProgress, StatusResolved, StatusClosed, StatusWithdrawn:
 		return true
 	default:
 		return false

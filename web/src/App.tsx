@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, ShieldCheck, ExternalLink, X } from 'lucide-react';
-import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, listFeedback, listMods, login, logout, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus } from './api/feedback';
+import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, listFeedback, listMods, login, logout, register, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus } from './api/feedback';
 import { AdminPanel } from './components/AdminPanel';
 import { Detail } from './components/Detail';
 import { FeedbackForm } from './components/FeedbackForm';
@@ -27,7 +27,7 @@ export function App() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState<'new' | 'old'>('new');
-  const [modal, setModal] = useState<'login' | 'create' | 'admin' | null>(null);
+  const [modal, setModal] = useState<'login' | 'register' | 'create' | 'admin' | null>(null);
   const [selected, setSelected] = useState<Feedback | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -90,6 +90,14 @@ export function App() {
     setModal(null);
     setError('');
     setNotice(t('signedIn'));
+    await refresh();
+  }
+
+  async function submitRegister(username: string, password: string, email: string, qq: string) {
+    await register(username, password, email, qq, locale);
+    setModal(null);
+    setError('');
+    setNotice(t('registered'));
     await refresh();
   }
 
@@ -170,7 +178,7 @@ export function App() {
 
   return (
     <>
-      <Topbar user={user} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { setError(''); setModal('admin'); }} />
+      <Topbar user={user} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { if (user?.role === 'admin') { setError(''); setModal('admin'); } }} />
       <main id="top" className="main-layout">
         <Sidebar filter={filter} settings={settings} mods={mods} modSlug={modSlug} count={count} onFilter={setFilter} onMod={selectMod} />
         <FeedbackList
@@ -201,15 +209,15 @@ export function App() {
       {notice && <Notice kind="ok" closeLabel={t('closeNotice')} onClose={() => setNotice('')} closeIcon={<X size={15} />}><Check size={16} />{notice}</Notice>}
       {modal && (
         <Modal
-          title={modal === 'login' ? t('loginTitle') : modal === 'admin' ? t('admin') : t('create')}
-          subtitle={modal === 'login' ? t('loginSubtitle') : modal === 'admin' ? t('adminSubtitle') : t('createSubtitle')}
+          title={modal === 'login' ? t('loginTitle') : modal === 'register' ? t('registerTitle') : modal === 'admin' ? t('admin') : t('create')}
+          subtitle={modal === 'login' ? t('loginSubtitle') : modal === 'register' ? t('registerSubtitle') : modal === 'admin' ? t('adminSubtitle') : t('createSubtitle')}
           wide={modal === 'admin'}
           onClose={() => setModal(null)}
         >
-          {modal === 'login' ? <LoginForm onSubmit={submitLogin} /> : modal === 'admin' ? <AdminPanel items={items} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} /> : <FeedbackForm onSubmit={submitFeedback} />}
+          {modal === 'login' || modal === 'register' ? <LoginForm mode={modal} onSubmit={modal === 'register' ? submitRegister : async (username, password) => submitLogin(username, password)} onSwitch={() => setModal(modal === 'register' ? 'login' : 'register')} /> : modal === 'admin' ? <AdminPanel items={items} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} /> : <FeedbackForm onSubmit={submitFeedback} />}
         </Modal>
       )}
-      {selected && <Detail item={selected} loggedIn={Boolean(user)} onClose={() => setSelected(null)} onStatus={changeStatus} />}
+      {selected && <Detail item={selected} canManage={user?.role === 'admin'} canEdit={Boolean(user && selected.author === user.username)} onClose={() => setSelected(null)} onStatus={changeStatus} onSave={saveRecord} />}
     </>
   );
 }

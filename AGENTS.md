@@ -10,7 +10,7 @@ The product has three feedback categories:
 - `feature`: feature requests
 - `question`: general questions
 
-Visitors can browse, search, filter, sort, and inspect feedback. The only write-capable account is the administrator account seeded from deployment secrets. There is no public registration flow. Authenticated users can create feedback, update its status, edit its content, delete it, and change the displayed site versions and icon.
+Visitors can browse, search, filter, sort, and inspect feedback. Anyone can register with a username, password, and optional email or QQ number. Registered members can create feedback and edit their own content. They can also switch their own feedback between `open` and `withdrawn`. The administrator account seeded from deployment secrets can update any status, edit or delete feedback, and change mods and displayed site versions and icons.
 
 ## Architecture
 
@@ -35,8 +35,8 @@ The Go service owns authentication, validation, SQLite access, API routing, stat
 - Preserve the existing Go + React + SQLite + Docker architecture unless the task explicitly changes it.
 - Keep the interface adapted to RimWorld mod feedback. Bug reports should retain fields for game version, mod version, mod list/load order, reproduction details, and optional save link.
 - Keep the three category values exactly `bug`, `feature`, and `question`; they are enforced by the SQLite check constraint and API validation.
-- Keep status values exactly `open`, `in_progress`, `resolved`, and `closed`.
-- Do not introduce public registration, plaintext passwords, localStorage authentication tokens, or credentials in source control.
+- Keep status values exactly `open`, `in_progress`, `resolved`, `closed`, and `withdrawn`.
+- Public registration accepts a username, password, and optional email or QQ number. Do not store plaintext passwords, localStorage authentication tokens, or credentials in source control.
 - Passwords are stored only as bcrypt hashes. Sessions are HttpOnly, SameSite=Lax cookies containing signed JWTs.
 - Maintain request size limits, unknown-field rejection, title/body length validation, category validation, and status validation when changing API code.
 - Keep the container non-root, read-only, capability-dropped, and backed by the named `feedback-data` volume.
@@ -85,17 +85,18 @@ Important API behavior:
 
 - `GET /api/health` returns `{"status":"ok"}`.
 - `POST /api/auth/login` sets the session cookie.
+- `POST /api/auth/register` creates a member account and sets the session cookie. Username and password are required; email and QQ are optional.
 - `POST /api/auth/logout` clears the session cookie.
 - `GET /api/auth/me` requires a valid session.
 - `GET /api/feedback` is public; optional `?category=bug|feature|question` and `?mod=<slug>` filtering are supported. An omitted `mod` uses `rhah`.
 - `POST /api/feedback` requires authentication and stores the item on the `mod` query slug.
-- `PATCH /api/feedback/{id}` requires authentication and updates title, body, versions, mod list, and save link.
-- `PATCH /api/feedback/{id}/status` requires authentication.
-- `DELETE /api/feedback/{id}` requires authentication.
+- `PATCH /api/feedback/{id}` requires the author or administrator session and updates title, body, versions, mod list, and save link.
+- `PATCH /api/feedback/{id}/status` lets an author switch only between `open` and `withdrawn`; an administrator can set any valid status.
+- `DELETE /api/feedback/{id}` requires the administrator session.
 - `GET /api/mods` is public and returns the selectable feedback mods.
-- `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require authentication. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
+- `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require the administrator session. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
 - `GET /api/settings` is public and returns the displayed mod version, game version, and icon.
-- `PUT /api/settings` requires authentication.
+- `PUT /api/settings` requires the administrator session.
 
 ## Docker Deployment
 
@@ -173,8 +174,8 @@ After code changes:
 3. Start the service or Compose stack.
 4. Check `GET /api/health`.
 5. Verify anonymous feedback creation returns `401`.
-6. Log in with the configured administrator account.
-7. Create one feedback item and verify its author/category.
+6. Register a member. Verify the member can create and edit their own feedback, switch it between `open` and `withdrawn`, and receives `403` for another user's feedback, staff statuses, deletion, settings, and mod changes.
+7. Log in with the configured administrator account.
 8. Update its status and read it back from `GET /api/feedback`.
 9. Verify the frontend HTML and its JavaScript asset load.
 10. For Docker changes, check `docker compose ps` is `healthy` and inspect logs.

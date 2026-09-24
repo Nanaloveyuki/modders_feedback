@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -48,7 +49,7 @@ CREATE TABLE IF NOT EXISTS feedback (
  title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
  game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
  mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
- status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed','withdrawn')),
  created_at DATETIME NOT NULL
 );
 CREATE TABLE IF NOT EXISTS site_settings (
@@ -68,14 +69,60 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 	if err != nil {
 		return err
 	}
+	if err = s.ensureUsers(); err != nil {
+		return err
+	}
 	if err = s.ensureCategoryNumber(); err != nil {
 		return err
 	}
 	if err = s.ensureMods(); err != nil {
 		return err
 	}
+	if err = s.ensureWithdrawnStatus(); err != nil {
+		return err
+	}
 	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`)
 	return err
+}
+
+func (s *Store) ensureWithdrawnStatus() error {
+	var definition string
+	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'feedback'`).Scan(&definition); err != nil {
+		return err
+	}
+	if strings.Contains(definition, "'withdrawn'") {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE feedback_status_migration (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ mod_id INTEGER REFERENCES mods(id),
+ category TEXT NOT NULL CHECK(category IN ('bug','feature','question')),
+ category_number INTEGER,
+ title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
+ game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
+ mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed','withdrawn')),
+ created_at DATETIME NOT NULL
+)`,
+		`INSERT INTO feedback_status_migration(id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at)
+ SELECT id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`,
+		`DROP TABLE feedback`,
+		`ALTER TABLE feedback_status_migration RENAME TO feedback`,
+		`CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`,
+	}
+	for _, statement := range statements {
+		if _, err = tx.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ensureMods() error {
@@ -168,6 +215,27 @@ func (s *Store) ensureCategoryNumber() error {
 	return tx.Commit()
 }
 
+func (s *Store) ensureUsers() error {
+	columns := map[string]string{
+		"role":  "TEXT NOT NULL DEFAULT 'member'",
+		"email": "TEXT NOT NULL DEFAULT ''",
+		"qq":    "TEXT NOT NULL DEFAULT ''",
+	}
+	for name, definition := range columns {
+		var present int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = ?`, name).Scan(&present); err != nil {
+			return err
+		}
+		if present == 0 {
+			if _, err := s.db.Exec(`ALTER TABLE users ADD COLUMN ` + name + ` ` + definition); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users(email) WHERE email != ''`)
+	return err
+}
+
 func (s *Store) SeedAdmin(username, password string) error {
 	if username == "" && password == "" {
 		return nil
@@ -180,26 +248,69 @@ func (s *Store) SeedAdmin(username, password string) error {
 		return err
 	}
 	_, err = s.db.Exec(
-		`INSERT INTO users(username,password_hash,created_at) VALUES(?,?,?) ON CONFLICT(username) DO NOTHING`,
-		username, hash, time.Now().UTC(),
+		`INSERT INTO users(username,password_hash,role,email,qq,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(username) DO UPDATE SET role = 'admin'`,
+		username, hash, "admin", "", "", time.Now().UTC(),
 	)
 	return err
 }
 
-func (s *Store) Authenticate(username, password string) (bool, error) {
-	var hash []byte
-	err := s.db.QueryRow("SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
+func (s *Store) Authenticate(username, password string) (domain.User, bool, error) {
+	user, hash, err := s.userByUsername(username)
 	if errors.Is(err, sql.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"), []byte(password))
-		return false, nil
+		return domain.User{}, false, nil
 	}
 	if err != nil {
-		return false, err
+		return domain.User{}, false, err
 	}
 	if bcrypt.CompareHashAndPassword(hash, []byte(password)) != nil {
-		return false, nil
+		return domain.User{}, false, nil
 	}
-	return true, nil
+	return user, true, nil
+}
+
+func (s *Store) User(username string) (domain.User, bool, error) {
+	user, _, err := s.userByUsername(username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.User{}, false, nil
+	}
+	if err != nil {
+		return domain.User{}, false, err
+	}
+	return user, true, nil
+}
+
+func (s *Store) Register(input domain.Registration) (domain.User, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return domain.User{}, err
+	}
+	now := time.Now().UTC()
+	result, err := s.db.Exec(
+		`INSERT INTO users(username,password_hash,role,email,qq,created_at) VALUES(?,?,?,?,?,?)`,
+		input.Username, hash, "member", input.Email, input.QQ, now,
+	)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return domain.User{}, domain.ErrUsernameTaken
+		}
+		return domain.User{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil || id < 1 {
+		return domain.User{}, err
+	}
+	return domain.User{Username: input.Username, Role: "member"}, nil
+}
+
+func (s *Store) userByUsername(username string) (domain.User, []byte, error) {
+	var user domain.User
+	var hash []byte
+	err := s.db.QueryRow(`SELECT username, role, password_hash FROM users WHERE username = ?`, username).Scan(&user.Username, &user.Role, &hash)
+	if user.Role != "admin" {
+		user.Role = "member"
+	}
+	return user, hash, err
 }
 func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([]domain.Feedback, error) {
 	if limit < 1 || limit > 100 {

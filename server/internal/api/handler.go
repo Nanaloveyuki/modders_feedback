@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -37,6 +38,7 @@ func (h *Handler) Routes() *chi.Mux {
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, middleware.Timeout(15*time.Second))
 	r.Get("/api/health", h.health)
 	r.Post("/api/auth/login", h.login)
+	r.Post("/api/auth/register", h.register)
 	r.Post("/api/auth/logout", h.logout)
 	r.Get("/api/auth/me", h.me)
 	r.Get("/api/mods", h.listMods)
@@ -63,7 +65,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	if !httpx.Decode(w, r, &input) {
 		return
 	}
-	ok, err := h.store.Authenticate(input.Username, input.Password)
+	user, ok, err := h.store.Authenticate(input.Username, input.Password)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "登录暂不可用", "Login is unavailable"))
 		return
@@ -72,11 +74,39 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "用户名或密码错误", "Incorrect username or password"))
 		return
 	}
-	if err := h.sessions.Issue(w, input.Username); err != nil {
+	if err := h.sessions.Issue(w, user.Username); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "登录暂不可用", "Login is unavailable"))
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"username": input.Username})
+	httpx.JSON(w, http.StatusOK, user)
+}
+
+func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
+	var input domain.Registration
+	if !httpx.Decode(w, r, &input) {
+		return
+	}
+	input.Username = strings.TrimSpace(input.Username)
+	input.Email = strings.TrimSpace(input.Email)
+	input.QQ = strings.TrimSpace(input.QQ)
+	if !validUsername(input.Username) || !validPassword(input.Password) || !validOptionalEmail(input.Email) || !validOptionalQQ(input.QQ) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "用户名为 3-32 位字母、数字、下划线或连字符；密码至少 12 位。邮箱和 QQ 号可选。", "Username must be 3-32 letters, digits, underscores, or hyphens; password must be at least 12 characters. Email and QQ are optional."))
+		return
+	}
+	user, err := h.store.Register(input)
+	if errors.Is(err, domain.ErrUsernameTaken) {
+		httpx.Error(w, http.StatusConflict, httpx.Text(r, "用户名或邮箱已被使用", "Username or email is already in use"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "注册暂不可用", "Registration is unavailable"))
+		return
+	}
+	if err := h.sessions.Issue(w, user.Username); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "注册暂不可用", "Registration is unavailable"))
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, user)
 }
 
 func (h *Handler) logout(w http.ResponseWriter, _ *http.Request) {
@@ -90,7 +120,17 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]string{"username": username})
+	user, found, err := h.store.User(username)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取账号失败", "Could not load the account"))
+		return
+	}
+	if !found {
+		h.sessions.Clear(w)
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+		return
+	}
+	httpx.JSON(w, http.StatusOK, user)
 }
 
 func (h *Handler) listFeedback(w http.ResponseWriter, r *http.Request) {
@@ -157,8 +197,8 @@ func (h *Handler) createFeedback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	user, ok := h.currentUser(w, r)
+	if !ok {
 		return
 	}
 	var input domain.StatusUpdate
@@ -169,9 +209,21 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈状态无效", "Invalid feedback status"))
 		return
 	}
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || id < 1 {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈编号无效", "Invalid feedback id"))
+	id, ok := feedbackID(w, r)
+	if !ok {
+		return
+	}
+	item, err := h.store.GetFeedback(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
+		return
+	}
+	if user.Role != "admin" && (!authorOf(user, item) || !authorStatusChange(item.Status, input.Status)) {
+		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能在自己的反馈中切换待处理和已撤回", "You can only switch your own feedback between open and withdrawn"))
 		return
 	}
 	updated, err := h.store.UpdateStatus(id, input.Status)
@@ -187,8 +239,8 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateFeedback(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	user, ok := h.currentUser(w, r)
+	if !ok {
 		return
 	}
 	id, ok := feedbackID(w, r)
@@ -213,6 +265,19 @@ func (h *Handler) updateFeedback(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "版本、模组列表或存档链接超出长度限制", "Version, mod list, or save link is too long"))
 		return
 	}
+	current, err := h.store.GetFeedback(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈失败", "Could not update feedback"))
+		return
+	}
+	if user.Role != "admin" && !authorOf(user, current) {
+		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能编辑自己的反馈", "You can only edit your own feedback"))
+		return
+	}
 	item, updated, err := h.store.UpdateFeedback(id, input)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈失败", "Could not update feedback"))
@@ -226,8 +291,7 @@ func (h *Handler) updateFeedback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteFeedback(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	if _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	id, ok := feedbackID(w, r)
@@ -256,8 +320,7 @@ func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	if _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	var input domain.SiteSettings
@@ -339,8 +402,7 @@ func (h *Handler) listMods(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createMod(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	if _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	input, ok := decodeMod(w, r)
@@ -356,8 +418,7 @@ func (h *Handler) createMod(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) updateMod(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	if _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	id, ok := feedbackID(w, r)
@@ -381,8 +442,7 @@ func (h *Handler) updateMod(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteMod(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.sessions.Username(r); !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+	if _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	id, ok := feedbackID(w, r)
@@ -403,6 +463,95 @@ func (h *Handler) deleteMod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) currentUser(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
+	username, ok := h.sessions.Username(r)
+	if !ok {
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+		return domain.User{}, false
+	}
+	user, found, err := h.store.User(username)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取账号失败", "Could not load the account"))
+		return domain.User{}, false
+	}
+	if !found {
+		h.sessions.Clear(w)
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+		return domain.User{}, false
+	}
+	return user, true
+}
+
+func authorOf(user domain.User, item domain.Feedback) bool {
+	return user.Username == item.Author
+}
+
+func authorStatusChange(current, next string) bool {
+	return (current == domain.StatusOpen || current == domain.StatusWithdrawn) && (next == domain.StatusOpen || next == domain.StatusWithdrawn)
+}
+
+func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
+	username, ok := h.sessions.Username(r)
+	if !ok {
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+		return domain.User{}, false
+	}
+	user, found, err := h.store.User(username)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取账号失败", "Could not load the account"))
+		return domain.User{}, false
+	}
+	if !found || user.Role != "admin" {
+		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "需要管理员权限", "Administrator access is required"))
+		return domain.User{}, false
+	}
+	return user, true
+}
+
+func validUsername(value string) bool {
+	if !withinRunes(value, 3, 32) {
+		return false
+	}
+	for _, char := range value {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '_' && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func validPassword(value string) bool {
+	count := utf8.RuneCountInString(value)
+	return count >= 12 && count <= 128
+}
+
+func validOptionalEmail(value string) bool {
+	if value == "" {
+		return true
+	}
+	if !withinRunes(value, 3, 254) || strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+	at := strings.IndexByte(value, '@')
+	dot := strings.LastIndexByte(value, '.')
+	return at > 0 && dot > at+1 && dot < len(value)-1 && strings.Count(value, "@") == 1
+}
+
+func validOptionalQQ(value string) bool {
+	if value == "" {
+		return true
+	}
+	if len(value) < 5 || len(value) > 11 || value[0] == '0' {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *Handler) requestedMod(w http.ResponseWriter, r *http.Request) (domain.Mod, bool) {

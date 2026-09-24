@@ -109,6 +109,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .form-stack > label, .form-two label { display: grid; gap: 7px; color: var(--muted); font-size: 10px; }
 .form-stack input, .form-stack textarea, .status-editor select { width: 100%; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 4px; padding: 10px; font-size: 11px; outline: none; resize: vertical; }
 .form-hint { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: 9px; margin: -1px 0 0; }
+.form-switch { cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin: 2px 0 0; padding: 0; border: 0; background: transparent; color: var(--gold); font-size: 11px; }
+.form-switch:hover { text-decoration: underline; }
+.own-edit { justify-content: flex-start; width: auto; margin-top: 14px; }
+.own-editor { padding-top: 12px; }
 .form-hint svg { flex: none; }
 .form-error { margin: -3px 0 0; color: var(--danger); font-size: 10px; line-height: 1.5; }
 .category-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 0; padding: 0; border: 0; }

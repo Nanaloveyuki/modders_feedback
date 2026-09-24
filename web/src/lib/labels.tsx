@@ -12,13 +12,15 @@ export const categoryIcons: Record<Category, ReactNode> = {
 
 export const categoryKeys = Object.keys(categoryIcons) as Category[];
 
-export const statusKeys: Status[] = ['open', 'in_progress', 'resolved', 'closed'];
+export const statusKeys: Status[] = ['open', 'in_progress', 'resolved', 'closed', 'withdrawn'];
+export const authorStatusKeys: Status[] = ['open', 'withdrawn'];
 
 export const statusStyle: Record<Status, string> = {
   open: 'status-open',
   in_progress: 'status-progress',
   resolved: 'status-resolved',
   closed: 'status-closed',
+  withdrawn: 'status-withdrawn',
 };
 
 export function useLabels() {

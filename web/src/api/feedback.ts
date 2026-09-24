@@ -23,6 +23,10 @@ export function login(username: string, password: string, locale: Locale) {
   return api<User>('/auth/login', locale, { method: 'POST', body: JSON.stringify({ username, password }) });
 }
 
+export function register(username: string, password: string, email: string, qq: string, locale: Locale) {
+  return api<User>('/auth/register', locale, { method: 'POST', body: JSON.stringify({ username, password, email, qq }) });
+}
+
 export function logout(locale: Locale) {
   return api<void>('/auth/logout', locale, { method: 'POST' });
 }
