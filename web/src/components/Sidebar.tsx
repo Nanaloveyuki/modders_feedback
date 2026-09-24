@@ -13,9 +13,7 @@ export function Sidebar({ filter, count, openCount, onFilter }: Props) {
   return (
     <aside className="sidebar">
       <div className="project-block">
-        <div className="project-eyebrow">MOD FEEDBACK / 001</div>
-        <h1>把问题留下，<br /><span>让聚落更好。</span></h1>
-        <p>关于《鼠族：饥与祸》的错误、想法和问题，都从这里开始。</p>
+        <div className="project-eyebrow">MOD FEEDBACK / PLAYER NOTES</div>
       </div>
       <div className="side-rule" />
       <div className="side-label">反馈板块</div>

@@ -1,9 +1,17 @@
 import type { Category, Feedback, FeedbackDraft, Status, User } from '../types';
 import { api } from './client';
 
-export function listFeedback(category: Category | 'all') {
-  const query = category === 'all' ? '' : `?category=${category}`;
-  return api<Feedback[]>(`/feedback${query}`);
+export async function listFeedback(category: Category | 'all') {
+  const items: Feedback[] = [];
+  const pageSize = 100;
+  for (let offset = 0; offset <= 10000; offset += pageSize) {
+    const params = new URLSearchParams({ limit: String(pageSize), offset: String(offset) });
+    if (category !== 'all') params.set('category', category);
+    const page = await api<Feedback[]>(`/feedback?${params}`);
+    items.push(...page);
+    if (page.length < pageSize) return items;
+  }
+  return items;
 }
 
 export function currentUser() {

@@ -14,17 +14,18 @@ const (
 )
 
 type Feedback struct {
-	ID          int64     `json:"id"`
-	Category    string    `json:"category"`
-	Title       string    `json:"title"`
-	Body        string    `json:"body"`
-	Author      string    `json:"author"`
-	GameVersion string    `json:"gameVersion"`
-	ModVersion  string    `json:"modVersion"`
-	ModList     string    `json:"modList"`
-	SaveLink    string    `json:"saveLink"`
-	Status      string    `json:"status"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID             int64     `json:"id"`
+	Category       string    `json:"category"`
+	CategoryNumber int64     `json:"categoryNumber"`
+	Title          string    `json:"title"`
+	Body           string    `json:"body"`
+	Author         string    `json:"author"`
+	GameVersion    string    `json:"gameVersion"`
+	ModVersion     string    `json:"modVersion"`
+	ModList        string    `json:"modList"`
+	SaveLink       string    `json:"saveLink"`
+	Status         string    `json:"status"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type Credentials struct {

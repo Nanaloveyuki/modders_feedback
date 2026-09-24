@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -90,7 +91,17 @@ func (h *Handler) listFeedback(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "反馈分类无效")
 		return
 	}
-	items, err := h.store.ListFeedback(category)
+	limit, err := boundedQuery(r, "limit", 50, 100)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "分页参数无效")
+		return
+	}
+	offset, err := boundedQuery(r, "offset", 0, 10000)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, "分页参数无效")
+		return
+	}
+	items, err := h.store.ListFeedback(category, limit, offset)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, "读取反馈失败")
 		return
@@ -141,9 +152,14 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "反馈状态无效")
 		return
 	}
-	updated, err := h.store.UpdateStatus(chi.URLParam(r, "id"), input.Status)
-	if err != nil {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id < 1 {
 		httpx.Error(w, http.StatusBadRequest, "反馈编号无效")
+		return
+	}
+	updated, err := h.store.UpdateStatus(id, input.Status)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "更新反馈状态失败")
 		return
 	}
 	if !updated {
@@ -174,4 +190,23 @@ func (h *Handler) static() http.Handler {
 func withinRunes(value string, min, max int) bool {
 	count := utf8.RuneCountInString(value)
 	return count >= min && count <= max
+}
+
+func boundedQuery(r *http.Request, key string, fallback, max int) (int, error) {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 || parsed > max {
+		return 0, errOrRange(err)
+	}
+	return parsed, nil
+}
+
+func errOrRange(err error) error {
+	if err != nil {
+		return err
+	}
+	return strconv.ErrRange
 }

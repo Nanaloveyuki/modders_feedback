@@ -24,6 +24,7 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('feedback-theme') as 'light' | 'dark' | null) ?? 'dark');
   const [page, setPage] = useState(1);
 
   async function refresh() {
@@ -43,6 +44,10 @@ export function App() {
   }
 
   useEffect(() => { void refresh(); }, [filter]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('feedback-theme', theme);
+  }, [theme]);
   useEffect(() => { setPage(1); }, [filter, query, status]);
 
   const filtered = items.filter((item) => {
@@ -95,7 +100,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <Topbar user={user} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} />
+      <Topbar user={user} theme={theme} onThemeChange={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} />
       <main id="top" className="main-layout">
         <Sidebar filter={filter} count={count} openCount={openCount} onFilter={setFilter} />
         <FeedbackList
@@ -127,7 +132,7 @@ export function App() {
       {modal && (
         <Modal
           title={modal === 'login' ? '登录反馈站' : '发布反馈'}
-          subtitle={modal === 'login' ? '使用站点提供的账号登录。' : '描述你遇到的情况，帮助我们复现与验证。'}
+          subtitle={modal === 'login' ? '使用站点提供的账号登录。' : ''}
           onClose={() => setModal(null)}
         >
           {modal === 'login' ? <LoginForm onSubmit={submitLogin} /> : <FeedbackForm onSubmit={submitFeedback} />}

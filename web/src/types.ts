@@ -4,6 +4,7 @@ export type Status = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type Feedback = {
   id: number;
   category: Category;
+  categoryNumber?: number;
   title: string;
   body: string;
   author: string;

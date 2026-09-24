@@ -59,7 +59,7 @@ export function FeedbackList({
         {loading ? <div className="empty-state"><span className="loading-dash" />正在载入反馈记录</div> : shown.length ? shown.map((item, index) => (
           <article key={item.id} className="feedback-row" style={{ animationDelay: `${index * 36}ms` }}>
             <button className="row-main" onClick={() => onOpen(item)}>
-              <span className={`row-category cat-${item.category}`}>{categories[item.category].icon}<span>{categories[item.category].label}</span></span>
+              <span className={`row-category cat-${item.category}`}>{categories[item.category].icon}<span>{categories[item.category].label} / {(item.categoryNumber ?? item.id).toString().padStart(3, '0')}</span></span>
               <span className="row-title">{item.title}</span>
               <span className="row-excerpt">{excerpt(item.body)}</span>
               <span className="row-meta-mobile">

@@ -1,13 +1,15 @@
-import { ExternalLink, Github, LockKeyhole, LogOut, Squirrel } from 'lucide-react';
+import { ExternalLink, Github, LockKeyhole, LogOut, Moon, Sun, Squirrel } from 'lucide-react';
 import type { User } from '../types';
 
 type Props = {
   user: User | null;
+  theme: 'light' | 'dark';
+  onThemeChange: () => void;
   onLogin: () => void;
   onLogout: () => void;
 };
 
-export function Topbar({ user, onLogin, onLogout }: Props) {
+export function Topbar({ user, theme, onThemeChange, onLogin, onLogout }: Props) {
   return (
     <header className="topbar">
       <a className="brand" href="#top" aria-label="鼠族：饥与祸反馈站首页">
@@ -21,15 +23,8 @@ export function Topbar({ user, onLogin, onLogout }: Props) {
         <a href="https://github.com/" target="_blank" rel="noreferrer" aria-label="项目主页"><Github size={15} /></a>
       </nav>
       <div className="account-area">
-        {user ? (
-          <>
-            <span className="user-avatar">{user.username.slice(0, 1).toUpperCase()}</span>
-            <span className="account-name">{user.username}</span>
-            <button className="icon-button" title="退出登录" onClick={onLogout}><LogOut size={17} /></button>
-          </>
-        ) : (
-          <button className="login-button" onClick={onLogin}><LockKeyhole size={14} /> 登录</button>
-        )}
+        <button className="icon-button theme-toggle" title={theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'} aria-label={theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'} onClick={onThemeChange}>{theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}</button>
+        {user ? <><span className="user-avatar">{user.username.slice(0, 1).toUpperCase()}</span><span className="account-name">{user.username}</span><button className="icon-button" title="退出登录" onClick={onLogout}><LogOut size={17} /></button></> : <button className="login-button" onClick={onLogin}><LockKeyhole size={14} /> 登录</button>}
       </div>
     </header>
   );
