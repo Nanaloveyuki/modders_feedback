@@ -94,6 +94,7 @@ Important API behavior:
 - `PATCH /api/feedback/{id}` requires the author or administrator session and updates title, body, versions, mod list, and save link.
 - `PATCH /api/feedback/{id}/status` lets an author switch only between `open` and `withdrawn`; an administrator can set any valid status.
 - `DELETE /api/feedback/{id}` requires the administrator session.
+- `GET /api/mods/{slug}/feedback/{bugs|feature|question}/{publicId}` is public. `bugs` maps to category `bug`. Each feedback row stores a lowercase UUID in `public_id`; startup assigns one to rows that do not have it. The browser route is `/mod/<slug>/<bugs|feature|question>/<publicId>`. Rows that still have no public id stay on the board overlay.
 - `GET /api/mods` is public and returns the selectable feedback mods.
 - `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require the administrator session. Each mod stores its own Steam and GitHub links, shown in the top bar for the selected mod. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
 - `GET /api/settings` is public and returns the displayed mod version, game version, and icon.

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Clipboard, ExternalLink, X } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import { authorStatusKeys, categoryIcons, statusKeys, statusStyle, useLabels } from '../lib/labels';
+import { feedbackPath } from '../router';
 import { useTheme } from '../theme/context';
 import type { Feedback, FeedbackUpdate, Status } from '../types';
 import { statusColors } from './FeedbackList';
@@ -9,6 +10,7 @@ import { ActionButton, Avatar, Field, IconButton, Panel, Scrim } from './ui';
 
 type Props = {
   item: Feedback;
+  modSlug: string;
   canManage: boolean;
   canEdit: boolean;
   onClose: () => void;
@@ -16,7 +18,7 @@ type Props = {
   onSave: (item: Feedback, update: FeedbackUpdate) => Promise<void>;
 };
 
-export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: Props) {
+export function Detail({ item, modSlug, canManage, canEdit, onClose, onStatus, onSave }: Props) {
   const { t } = useI18n();
   const labels = useLabels();
   const { palette } = useTheme();
@@ -111,7 +113,7 @@ export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: 
         )}
         <div className="detail-bottom" style={{ color: palette.faint }}>
           <span>ISSUE / {String(item.id).padStart(4, '0')}</span>
-          <button onClick={() => { void navigator.clipboard?.writeText(window.location.href); }} style={{ color: palette.gold }}>
+          <button onClick={() => { const path = item.publicId ? feedbackPath(modSlug, item.category, item.publicId) : window.location.pathname; void navigator.clipboard?.writeText(new URL(path, window.location.origin).href); }} style={{ color: palette.gold }}>
             <Clipboard size={14} />{t('copyAddress')}
           </button>
         </div>

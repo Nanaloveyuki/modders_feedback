@@ -15,6 +15,11 @@ export async function listFeedback(mod: string, category: Category | 'all', loca
   return items;
 }
 
+export function getFeedback(slug: string, category: Category, publicId: string, locale: Locale) {
+  const segment = category === 'bug' ? 'bugs' : category;
+  return api<Feedback>(`/mods/${encodeURIComponent(slug)}/feedback/${segment}/${publicId}`, locale);
+}
+
 export function currentUser(locale: Locale) {
   return api<User>('/auth/me', locale);
 }

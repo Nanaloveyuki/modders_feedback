@@ -3,6 +3,7 @@ export type Status = 'open' | 'in_progress' | 'resolved' | 'closed' | 'withdrawn
 
 export type Feedback = {
   id: number;
+  publicId: string;
   modId?: number;
   category: Category;
   categoryNumber?: number;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
-import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, listFeedback, listMods, login, logout, register, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus } from './api/feedback';
+import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, getFeedback, listFeedback, listMods, login, logout, register, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus } from './api/feedback';
 import { AccountPage } from './components/AccountPage';
 import { AdminPanel } from './components/AdminPanel';
 import { Detail } from './components/Detail';
@@ -13,7 +13,7 @@ import { Topbar } from './components/Topbar';
 import { Notice } from './components/ui';
 import { useI18n } from './i18n/context';
 import { defaultSettings } from './lib/icons';
-import { adminPath, currentRoute, navigate, type Route } from './router';
+import { adminPath, currentRoute, feedbackPath, navigate, type Route } from './router';
 import { useTheme } from './theme/context';
 import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, SiteSettings, Status, User } from './types';
 
@@ -32,6 +32,8 @@ export function App() {
   const [sort, setSort] = useState<'new' | 'old'>('new');
   const [modal, setModal] = useState<'login' | 'register' | 'create' | null>(null);
   const [selected, setSelected] = useState<Feedback | null>(null);
+  const [routed, setRouted] = useState<Feedback | null>(null);
+  const [routeMissing, setRouteMissing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -73,6 +75,32 @@ export function App() {
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
+  useEffect(() => {
+    if (route.name !== 'feedback') {
+      setRouted(null);
+      setRouteMissing(false);
+      return;
+    }
+    const known = [...items, ...adminItems].find((item) => item.publicId === route.publicId && item.category === route.category);
+    if (known && modSlug === route.slug) {
+      setRouted(known);
+      setRouteMissing(false);
+      return;
+    }
+    let cancelled = false;
+    setRouteMissing(false);
+    void getFeedback(route.slug, route.category, route.publicId, locale).then((item) => {
+      if (cancelled) return;
+      setRouted(item);
+      if (modSlug !== route.slug) void refresh(route.slug);
+    }).catch((problem: unknown) => {
+      if (cancelled) return;
+      setRouted(null);
+      setRouteMissing(true);
+      setError(problem instanceof Error ? problem.message : t('loadFailed'));
+    });
+    return () => { cancelled = true; };
+  }, [route, locale, items, adminItems, modSlug]);
   useEffect(() => { setPage(1); }, [filter, query, status]);
 
   const filtered = items.filter((item) => {
@@ -128,7 +156,17 @@ export function App() {
     setStatus('all');
     setPage(1);
     setSelected(null);
+    if (route.name === 'feedback') navigate('/');
     void refresh(slug);
+  }
+
+  function openFeedback(item: Feedback) {
+    const slug = mods.find((mod) => mod.id === item.modId)?.slug ?? modSlug;
+    if (item.publicId) {
+      navigate(feedbackPath(slug, item.category, item.publicId));
+      return;
+    }
+    setSelected(item);
   }
 
   async function addMod(input: ModInput) {
@@ -167,6 +205,7 @@ export function App() {
     setItems((previous) => previous.map((entry) => entry.id === item.id ? saved : entry));
     setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? saved : entry));
     setSelected((previous) => previous?.id === item.id ? saved : previous);
+    setRouted((previous) => previous?.id === item.id ? saved : previous);
     setNotice(t('recordSaved'));
   }
 
@@ -175,6 +214,8 @@ export function App() {
     setItems((previous) => previous.filter((entry) => entry.id !== item.id));
     setAdminItems((previous) => previous.filter((entry) => entry.id !== item.id));
     setSelected((previous) => previous?.id === item.id ? null : previous);
+    setRouted((previous) => previous?.id === item.id ? null : previous);
+    if (route.name === 'feedback' && route.publicId === item.publicId) navigate('/');
     setNotice(t('recordDeleted'));
   }
 
@@ -184,6 +225,7 @@ export function App() {
       setItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
       setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
       setSelected((previous) => previous?.id === item.id ? { ...previous, status: next } : previous);
+      setRouted((previous) => previous?.id === item.id ? { ...previous, status: next } : previous);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('statusFailed'));
     }
@@ -228,7 +270,7 @@ export function App() {
           onStatus={setStatus}
           onSort={() => setSort((current) => current === 'new' ? 'old' : 'new')}
           onPage={setPage}
-          onOpen={setSelected}
+          onOpen={openFeedback}
           onCreate={openComposer}
         />
       </main>
@@ -244,7 +286,13 @@ export function App() {
           {modal === 'login' || modal === 'register' ? <LoginForm mode={modal} onSubmit={modal === 'register' ? submitRegister : async (username, password) => submitLogin(username, password)} onSwitch={() => setModal(modal === 'register' ? 'login' : 'register')} /> : <FeedbackForm onSubmit={submitFeedback} />}
         </Modal>
       )}
-      {selected && <Detail item={selected} canManage={user?.role === 'admin'} canEdit={Boolean(user && selected.author === user.username)} onClose={() => setSelected(null)} onStatus={changeStatus} onSave={saveRecord} />}
+      {route.name === 'feedback' && routeMissing && (
+        <main className="admin-denied">
+          <h1 style={{ color: palette.text }}>{t('feedbackMissing')}</h1>
+          <button type="button" className="create-button" onClick={() => navigate('/')}>{t('adminBack')}</button>
+        </main>
+      )}
+      {(routed ?? selected) && <Detail item={(routed ?? selected)!} modSlug={mods.find((mod) => mod.id === (routed ?? selected)!.modId)?.slug ?? modSlug} canManage={user?.role === 'admin'} canEdit={Boolean(user && (routed ?? selected)!.author === user.username)} onClose={() => { if (route.name === 'feedback') navigate('/'); else setSelected(null); }} onStatus={changeStatus} onSave={saveRecord} />}
     </>
   );
 }

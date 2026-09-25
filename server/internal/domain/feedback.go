@@ -32,6 +32,7 @@ const (
 
 type Feedback struct {
 	ID             int64     `json:"id"`
+	PublicID       string    `json:"publicId"`
 	ModID          int64     `json:"modId"`
 	Category       string    `json:"category"`
 	CategoryNumber int64     `json:"categoryNumber"`
@@ -163,4 +164,46 @@ func ValidStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func PublicCategory(category string) string {
+	if category == CategoryBug {
+		return "bugs"
+	}
+	return category
+}
+
+func CategoryFromPublic(segment string) (string, bool) {
+	switch segment {
+	case "bugs":
+		return CategoryBug, true
+	case CategoryFeature, CategoryQuestion:
+		return segment, true
+	default:
+		return "", false
+	}
+}
+
+func ValidPublicID(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	for i := range len(value) {
+		c := value[i]
+		switch i {
+		case 8, 13, 18, 23:
+			if c != '-' {
+				return false
+			}
+		default:
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func FeedbackPath(slug, category, publicID string) string {
+	return "/mod/" + slug + "/" + PublicCategory(category) + "/" + publicID
 }

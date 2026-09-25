@@ -1,6 +1,7 @@
 package store
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -83,6 +84,9 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 		return err
 	}
 	if err = s.ensureWithdrawnStatus(); err != nil {
+		return err
+	}
+	if err = s.ensurePublicID(); err != nil {
 		return err
 	}
 	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`)
@@ -403,7 +407,7 @@ func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([
 	if offset < 0 {
 		offset = 0
 	}
-	query := `SELECT id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ?`
+	query := `SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ?`
 	args := []any{modID}
 	if category != "" {
 		query += " AND category = ?"
@@ -419,7 +423,7 @@ func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([
 	items := make([]domain.Feedback, 0, limit)
 	for rows.Next() {
 		var item domain.Feedback
-		if err := rows.Scan(&item.ID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -438,7 +442,8 @@ func (s *Store) CreateFeedback(item domain.Feedback) (domain.Feedback, error) {
 	if err = tx.QueryRow(`SELECT COALESCE(MAX(category_number), 0) + 1 FROM feedback WHERE mod_id = ? AND category = ?`, item.ModID, item.Category).Scan(&item.CategoryNumber); err != nil {
 		return domain.Feedback{}, err
 	}
-	result, err := tx.Exec(`INSERT INTO feedback(mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, item.ModID, item.Category, item.CategoryNumber, item.Title, item.Body, item.Author, item.GameVersion, item.ModVersion, item.ModList, item.SaveLink, item.CreatedAt)
+	item.PublicID = newPublicID()
+	result, err := tx.Exec(`INSERT INTO feedback(public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, item.PublicID, item.ModID, item.Category, item.CategoryNumber, item.Title, item.Body, item.Author, item.GameVersion, item.ModVersion, item.ModList, item.SaveLink, item.CreatedAt)
 	if err != nil {
 		return domain.Feedback{}, err
 	}
@@ -498,10 +503,76 @@ func (s *Store) UpdateFeedback(id int64, update domain.FeedbackUpdate) (domain.F
 func (s *Store) GetFeedback(id int64) (domain.Feedback, error) {
 	var item domain.Feedback
 	err := s.db.QueryRow(
-		`SELECT id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE id = ?`,
+		`SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE id = ?`,
 		id,
-	).Scan(&item.ID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
+	).Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
 	return item, err
+}
+
+func (s *Store) GetFeedbackByPublicID(modID int64, category, publicID string) (domain.Feedback, error) {
+	var item domain.Feedback
+	err := s.db.QueryRow(
+		`SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ? AND category = ? AND public_id = ?`,
+		modID, category, publicID,
+	).Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
+	return item, err
+}
+
+func (s *Store) ensurePublicID() error {
+	var present int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('feedback') WHERE name = 'public_id'`).Scan(&present); err != nil {
+		return err
+	}
+	if present == 0 {
+		if _, err := s.db.Exec(`ALTER TABLE feedback ADD COLUMN public_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	rows, err := s.db.Query(`SELECT id FROM feedback WHERE public_id = '' OR public_id IS NULL ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if _, err = s.db.Exec(`UPDATE feedback SET public_id = ? WHERE id = ? AND (public_id = '' OR public_id IS NULL)`, newPublicID(), id); err != nil {
+			return err
+		}
+	}
+	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_public_id ON feedback(public_id) WHERE public_id != ''`)
+	return err
+}
+
+func newPublicID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		panic(err)
+	}
+	raw[6] = (raw[6] & 0x0f) | 0x40
+	raw[8] = (raw[8] & 0x3f) | 0x80
+	const hex = "0123456789abcdef"
+	out := make([]byte, 36)
+	n := 0
+	for i, b := range raw {
+		if i == 4 || i == 6 || i == 8 || i == 10 {
+			out[n] = '-'
+			n++
+		}
+		out[n] = hex[b>>4]
+		out[n+1] = hex[b&0x0f]
+		n += 2
+	}
+	return string(out)
 }
 
 func (s *Store) SiteSettings() (domain.SiteSettings, error) {

@@ -64,6 +64,7 @@ func (h *Handler) Routes() *chi.Mux {
 	r.Patch("/api/feedback/{id}/status", h.updateStatus)
 	r.Patch("/api/feedback/{id}", h.updateFeedback)
 	r.Delete("/api/feedback/{id}", h.deleteFeedback)
+	r.Get("/api/mods/{slug}/feedback/{category}/{publicId}", h.getPublicFeedback)
 	r.Get("/api/settings", h.getSettings)
 	r.Put("/api/settings", h.updateSettings)
 	r.Handle("/*", h.static())
@@ -516,6 +517,43 @@ func feedbackID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+func (h *Handler) getPublicFeedback(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	if !domain.ValidSlug(slug) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "模组标识无效", "Invalid mod slug"))
+		return
+	}
+	category, ok := domain.CategoryFromPublic(chi.URLParam(r, "category"))
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈分类无效", "Invalid feedback category"))
+		return
+	}
+	publicID := strings.ToLower(chi.URLParam(r, "publicId"))
+	if !domain.ValidPublicID(publicID) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈编号无效", "Invalid feedback id"))
+		return
+	}
+	mod, err := h.store.ModBySlug(slug)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该模组", "Mod was not found"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取反馈失败", "Could not load feedback"))
+		return
+	}
+	item, err := h.store.GetFeedbackByPublicID(mod.ID, category, publicID)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取反馈失败", "Could not load feedback"))
+		return
+	}
+	httpx.JSON(w, http.StatusOK, item)
 }
 
 func (h *Handler) static() http.Handler {
