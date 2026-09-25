@@ -34,18 +34,18 @@ export function LoginForm({ mode, onSubmit, onSwitch }: Props) {
   return (
     <form className="form-stack" onSubmit={handleSubmit}>
       <Field label={t('username')}>
-        <input name="username" autoComplete="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_-]{3,32}" autoFocus placeholder={t('usernamePlaceholder')} style={control} />
+        <input name="username" autoComplete="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_-]{3,32}" autoFocus style={control} />
       </Field>
       <Field label={t('password')}>
-        <input name="password" type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} required minLength={mode === 'register' ? 12 : 1} maxLength={128} placeholder={mode === 'register' ? t('passwordRule') : t('passwordPlaceholder')} style={control} />
+        <input name="password" type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} required minLength={mode === 'register' ? 12 : 1} maxLength={128} placeholder={mode === 'register' ? t('passwordRule') : undefined} style={control} />
       </Field>
       {mode === 'register' && (
         <>
           <Field label={t('emailOptional')}>
-            <input name="email" type="email" autoComplete="email" maxLength={254} placeholder={t('emailPlaceholder')} style={control} />
+            <input name="email" type="email" autoComplete="email" maxLength={254} placeholder="name@example.com" style={control} />
           </Field>
           <Field label={t('qqOptional')}>
-            <input name="qq" inputMode="numeric" autoComplete="off" pattern="[1-9][0-9]{4,10}" maxLength={11} placeholder={t('qqPlaceholder')} style={control} />
+            <input name="qq" inputMode="numeric" autoComplete="off" pattern="[1-9][0-9]{4,10}" maxLength={11} style={control} />
           </Field>
         </>
       )}

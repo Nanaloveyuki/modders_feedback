@@ -62,7 +62,7 @@ export function FeedbackList({
       <div className="toolbar">
         <label className="search-field" style={field}>
           <Search size={16} />
-          <input aria-label={t('search')} placeholder={t('searchPlaceholder')} value={query} onChange={(event) => onQuery(event.target.value)} style={{ color: palette.text }} />
+          <input aria-label={t('search')} value={query} onChange={(event) => onQuery(event.target.value)} style={{ color: palette.text }} />
           {query && <button aria-label={t('clearSearch')} onClick={() => onQuery('')} style={{ color: palette.muted }}><X size={13} /></button>}
         </label>
         <label className="filter-select" style={field}>
@@ -106,7 +106,6 @@ export function FeedbackList({
               {narrowed ? <Search size={21} /> : <MessageSquareText size={21} />}
             </div>
             <strong style={{ color: palette.text }}>{narrowed ? t('noMatch') : t('quiet')}</strong>
-            <span style={{ color: palette.faint }}>{narrowed ? t('noMatchHint') : t('quietHint')}</span>
             {!narrowed && (
               <button onClick={onCreate} style={{ color: palette.goldInk, background: palette.accent }}>
                 <Plus size={15} />{t('firstItem')}

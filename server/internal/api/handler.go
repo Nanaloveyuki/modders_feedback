@@ -749,8 +749,10 @@ func decodeMod(w http.ResponseWriter, r *http.Request) (domain.ModInput, bool) {
 	input.GameVersion = strings.TrimSpace(input.GameVersion)
 	input.ModVersion = strings.TrimSpace(input.ModVersion)
 	input.Icon = strings.TrimSpace(input.Icon)
-	if !domain.ValidSlug(input.Slug) || !withinRunes(input.Name, 1, 40) || !withinRunes(input.GameVersion, 1, 40) || !withinRunes(input.ModVersion, 1, 40) || !domain.ValidIcon(input.Icon) {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查模组标识、名称（1-40 字）、版本和图标", "Check the slug, name (1-40 characters), versions, and icon"))
+	input.SteamURL = strings.TrimSpace(input.SteamURL)
+	input.GitHubURL = strings.TrimSpace(input.GitHubURL)
+	if !domain.ValidSlug(input.Slug) || !withinRunes(input.Name, 1, 40) || !withinRunes(input.GameVersion, 1, 40) || !withinRunes(input.ModVersion, 1, 40) || !domain.ValidIcon(input.Icon) || !domain.ValidOptionalURL(input.SteamURL) || !domain.ValidOptionalURL(input.GitHubURL) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查模组标识、名称（1-40 字）、版本、图标和链接", "Check the slug, name (1-40 characters), versions, icon, and links"))
 		return domain.ModInput{}, false
 	}
 	return input, true

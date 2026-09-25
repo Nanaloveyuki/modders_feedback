@@ -43,7 +43,6 @@ export function Sidebar({ filter, settings, mods, modSlug, count, onFilter, onMo
           <Search size={14} />
           <input
             aria-label={t('modSearch')}
-            placeholder={t('modSearchPlaceholder')}
             value={modQuery}
             onChange={(event) => setModQuery(event.target.value)}
           />

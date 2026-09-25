@@ -97,7 +97,6 @@ export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: 
         {canEdit && !editing && <button type="button" className="form-switch own-edit" style={{ color: palette.gold }} onClick={() => setEditing(true)}>{t('editOwn')}</button>}
         {canEdit && editing && (
           <form className="form-stack own-editor" onSubmit={(event) => void save(event)}>
-            <p className="form-hint" style={{ color: palette.faint }}>{t('editOwnHint')}</p>
             <Field label={t('title')}><input name="title" required minLength={5} maxLength={120} defaultValue={item.title} style={control} /></Field>
             <Field label={t('description')}><textarea name="body" required minLength={10} maxLength={12000} rows={5} defaultValue={item.body} style={control} /></Field>
             <div className="form-two">

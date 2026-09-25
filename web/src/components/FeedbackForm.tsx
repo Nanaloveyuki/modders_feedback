@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useI18n } from '../i18n/context';
-import type { MessageKey } from '../i18n/messages';
 import { categoryIcons, categoryKeys } from '../lib/labels';
 import { useTheme } from '../theme/context';
 import type { Category, FeedbackDraft } from '../types';
@@ -10,12 +9,6 @@ import { ActionButton, Field } from './ui';
 
 type Props = {
   onSubmit: (data: FeedbackDraft) => Promise<void>;
-};
-
-const placeholderKeys: Record<Category, { title: MessageKey; body: MessageKey }> = {
-  bug: { title: 'bugTitle', body: 'bugBody' },
-  feature: { title: 'featureTitle', body: 'featureBody' },
-  question: { title: 'questionTitle', body: 'questionBody' },
 };
 
 function categoryColor(palette: Palette, category: Category) {
@@ -78,16 +71,16 @@ export function FeedbackForm({ onSubmit }: Props) {
           );
         })}
       </fieldset>
-      <Field label={t('title')}><input name="title" required minLength={5} maxLength={120} placeholder={t(placeholderKeys[category].title)} style={control} /></Field>
-      <Field label={t('description')}><textarea name="body" required minLength={10} maxLength={12000} rows={5} placeholder={t(placeholderKeys[category].body)} style={control} /></Field>
+      <Field label={t('title')}><input name="title" required minLength={5} maxLength={120} style={control} /></Field>
+      <Field label={t('description')}><textarea name="body" required minLength={10} maxLength={12000} rows={5} style={control} /></Field>
       <div className="form-two">
         <Field label={t('gameVersionField')}><input name="gameVersion" maxLength={40} defaultValue="RimWorld 1.6" style={control} /></Field>
-        <Field label={t('modVersion')}><input name="modVersion" maxLength={80} placeholder={t('modVersionPlaceholder')} style={control} /></Field>
+        <Field label={t('modVersion')}><input name="modVersion" maxLength={80} style={control} /></Field>
       </div>
       {category === 'bug' && (
         <>
-          <Field label={t('modList')}><textarea name="modList" maxLength={6000} rows={2} placeholder={t('modListPlaceholder')} style={control} /></Field>
-          <Field label={t('saveLink')}><input name="saveLink" type="url" maxLength={500} placeholder={t('saveLinkPlaceholder')} style={control} /></Field>
+          <Field label={t('modList')}><textarea name="modList" maxLength={6000} rows={2} style={control} /></Field>
+          <Field label={t('saveLink')}><input name="saveLink" type="url" maxLength={500} style={control} /></Field>
         </>
       )}
       {error && <p className="form-error" role="alert" style={{ color: palette.danger }}>{error}</p>}

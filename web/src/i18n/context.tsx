@@ -24,7 +24,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(storageKey, locale);
     document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en';
     document.title = translate(locale, 'documentTitle');
-    document.querySelector('meta[name="description"]')?.setAttribute('content', translate(locale, 'documentDescription'));
   }, [locale]);
 
   const value = useMemo<I18n>(() => ({

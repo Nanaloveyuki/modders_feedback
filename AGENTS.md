@@ -39,6 +39,7 @@ The Go service owns authentication, validation, SQLite access, API routing, stat
 - Public registration accepts a username, password, and optional email or QQ number. Do not store plaintext passwords, localStorage authentication tokens, or credentials in source control.
 - Passwords are stored only as bcrypt hashes. Sessions are HttpOnly, SameSite=Lax cookies containing signed JWTs.
 - Maintain request size limits, unknown-field rejection, title/body length validation, category validation, and status validation when changing API code.
+- Keep interface copy short. Do not add subtitles, kickers, hints, or placeholders that repeat a nearby label or explain the screen to the user. Constraints that are not already visible belong in validation errors, not essays. Write this file for agents; do not put developer instructions in the UI.
 - Keep the container non-root, read-only, capability-dropped, and backed by the named `feedback-data` volume.
 - Do not use `docker compose down -v` during normal development. It deletes the SQLite database and all feedback.
 - Do not modify or delete unrelated user files, data, or Docker volumes.
@@ -94,7 +95,7 @@ Important API behavior:
 - `PATCH /api/feedback/{id}/status` lets an author switch only between `open` and `withdrawn`; an administrator can set any valid status.
 - `DELETE /api/feedback/{id}` requires the administrator session.
 - `GET /api/mods` is public and returns the selectable feedback mods.
-- `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require the administrator session. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
+- `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require the administrator session. Each mod stores its own Steam and GitHub links, shown in the top bar for the selected mod. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
 - `GET /api/settings` is public and returns the displayed mod version, game version, and icon.
 - `PUT /api/settings` requires the administrator session.
 

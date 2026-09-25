@@ -79,6 +79,9 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 	if err = s.ensureMods(); err != nil {
 		return err
 	}
+	if err = s.ensureModLinks(); err != nil {
+		return err
+	}
 	if err = s.ensureWithdrawnStatus(); err != nil {
 		return err
 	}
@@ -193,6 +196,25 @@ func (s *Store) ensureMods() error {
 		return err
 	}
 	return tx.Commit()
+}
+func (s *Store) ensureModLinks() error {
+	columns := []string{"steam_url", "github_url"}
+	for _, name := range columns {
+		var present int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('mods') WHERE name = ?`, name).Scan(&present); err != nil {
+			return err
+		}
+		if present == 0 {
+			if _, err := s.db.Exec(`ALTER TABLE mods ADD COLUMN ` + name + ` TEXT NOT NULL DEFAULT ''`); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := s.db.Exec(
+		`UPDATE mods SET steam_url = ?, github_url = ? WHERE slug = ? AND steam_url = '' AND github_url = ''`,
+		domain.DefaultSteamURL, domain.DefaultGitHubURL, domain.DefaultModSlug,
+	)
+	return err
 }
 
 func (s *Store) ensureCategoryNumber() error {
@@ -526,7 +548,7 @@ func (s *Store) UpdateSiteSettings(settings domain.SiteSettings) error {
 }
 
 func (s *Store) ListMods() ([]domain.Mod, error) {
-	rows, err := s.db.Query(`SELECT id, slug, name, game_version, mod_version, icon FROM mods ORDER BY sort_order, id`)
+	rows, err := s.db.Query(`SELECT id, slug, name, game_version, mod_version, icon, steam_url, github_url FROM mods ORDER BY sort_order, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +556,7 @@ func (s *Store) ListMods() ([]domain.Mod, error) {
 	mods := make([]domain.Mod, 0)
 	for rows.Next() {
 		var item domain.Mod
-		if err := rows.Scan(&item.ID, &item.Slug, &item.Name, &item.GameVersion, &item.ModVersion, &item.Icon); err != nil {
+		if err := rows.Scan(&item.ID, &item.Slug, &item.Name, &item.GameVersion, &item.ModVersion, &item.Icon, &item.SteamURL, &item.GitHubURL); err != nil {
 			return nil, err
 		}
 		mods = append(mods, item)
@@ -545,16 +567,16 @@ func (s *Store) ListMods() ([]domain.Mod, error) {
 func (s *Store) ModBySlug(slug string) (domain.Mod, error) {
 	var item domain.Mod
 	err := s.db.QueryRow(
-		`SELECT id, slug, name, game_version, mod_version, icon FROM mods WHERE slug = ?`,
+		`SELECT id, slug, name, game_version, mod_version, icon, steam_url, github_url FROM mods WHERE slug = ?`,
 		slug,
-	).Scan(&item.ID, &item.Slug, &item.Name, &item.GameVersion, &item.ModVersion, &item.Icon)
+	).Scan(&item.ID, &item.Slug, &item.Name, &item.GameVersion, &item.ModVersion, &item.Icon, &item.SteamURL, &item.GitHubURL)
 	return item, err
 }
 
 func (s *Store) CreateMod(input domain.ModInput) (domain.Mod, error) {
 	result, err := s.db.Exec(
-		`INSERT INTO mods(slug, name, game_version, mod_version, icon, sort_order) VALUES(?,?,?,?,?,(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM mods))`,
-		input.Slug, input.Name, input.GameVersion, input.ModVersion, input.Icon,
+		`INSERT INTO mods(slug, name, game_version, mod_version, icon, steam_url, github_url, sort_order) VALUES(?,?,?,?,?,?,?,(SELECT COALESCE(MAX(sort_order), 0) + 1 FROM mods))`,
+		input.Slug, input.Name, input.GameVersion, input.ModVersion, input.Icon, input.SteamURL, input.GitHubURL,
 	)
 	if err != nil {
 		return domain.Mod{}, err
@@ -563,13 +585,13 @@ func (s *Store) CreateMod(input domain.ModInput) (domain.Mod, error) {
 	if err != nil {
 		return domain.Mod{}, err
 	}
-	return domain.Mod{ID: id, Slug: input.Slug, Name: input.Name, GameVersion: input.GameVersion, ModVersion: input.ModVersion, Icon: input.Icon}, nil
+	return domain.Mod{ID: id, Slug: input.Slug, Name: input.Name, GameVersion: input.GameVersion, ModVersion: input.ModVersion, Icon: input.Icon, SteamURL: input.SteamURL, GitHubURL: input.GitHubURL}, nil
 }
 
 func (s *Store) UpdateMod(id int64, input domain.ModInput) (domain.Mod, bool, error) {
 	result, err := s.db.Exec(
-		`UPDATE mods SET slug = ?, name = ?, game_version = ?, mod_version = ?, icon = ? WHERE id = ?`,
-		input.Slug, input.Name, input.GameVersion, input.ModVersion, input.Icon, id,
+		`UPDATE mods SET slug = ?, name = ?, game_version = ?, mod_version = ?, icon = ?, steam_url = ?, github_url = ? WHERE id = ?`,
+		input.Slug, input.Name, input.GameVersion, input.ModVersion, input.Icon, input.SteamURL, input.GitHubURL, id,
 	)
 	if err != nil {
 		return domain.Mod{}, false, err
@@ -581,7 +603,7 @@ func (s *Store) UpdateMod(id int64, input domain.ModInput) (domain.Mod, bool, er
 	if count == 0 {
 		return domain.Mod{}, false, nil
 	}
-	return domain.Mod{ID: id, Slug: input.Slug, Name: input.Name, GameVersion: input.GameVersion, ModVersion: input.ModVersion, Icon: input.Icon}, true, nil
+	return domain.Mod{ID: id, Slug: input.Slug, Name: input.Name, GameVersion: input.GameVersion, ModVersion: input.ModVersion, Icon: input.Icon, SteamURL: input.SteamURL, GitHubURL: input.GitHubURL}, true, nil
 }
 
 func (s *Store) DeleteMod(id int64) (bool, error) {

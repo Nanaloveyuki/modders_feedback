@@ -143,11 +143,7 @@ export function AccountPage({ user, onUser }: Props) {
         <button type="button" className="admin-back" style={{ color: palette.gold }} onClick={() => navigate('/')}>
           <ArrowLeft size={15} />{t('adminBack')}
         </button>
-        <div>
-          <p className="admin-kicker" style={{ color: palette.gold }}>{t('accountKicker')}</p>
-          <h1 style={{ color: palette.text }}>{t('accountTitle')}</h1>
-          <p style={{ color: palette.muted }}>{t('accountSubtitle')}</p>
-        </div>
+        <h1 style={{ color: palette.text }}>{t('accountTitle')}</h1>
       </header>
       <form className="admin-record" style={{ background: palette.surface }} onSubmit={(event) => { event.preventDefault(); void saveProfile(); }}>
         <h2 style={{ color: palette.text }}>{t('profileTitle')}</h2>
@@ -190,7 +186,6 @@ export function AccountPage({ user, onUser }: Props) {
             <span className="avatar-preview avatar-letter" style={{ color: palette.danger, background: palette.hover }}>{user.username.slice(0, 1).toUpperCase()}</span>
           )}
           <div className="avatar-controls">
-            <p style={{ color: palette.muted }}>{t('avatarHint')}</p>
             <label className="create-button">
               <ImagePlus size={15} />{t('chooseAvatar')}
               <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden onChange={(event) => chooseFile(event.target.files?.[0])} />

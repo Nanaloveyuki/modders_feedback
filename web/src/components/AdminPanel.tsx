@@ -26,6 +26,8 @@ const emptyMod = {
   name: '',
   gameVersion: 'RIMWORLD 1.6',
   modVersion: 'DEV BUILD',
+  steamUrl: '',
+  githubUrl: '',
 };
 
 export function AdminPanel({ page, items, settings, mods, onSaveSettings, onSaveRecord, onDeleteRecord, onSaveMod, onAddMod, onDeleteMod }: Props) {
@@ -38,11 +40,7 @@ export function AdminPanel({ page, items, settings, mods, onSaveSettings, onSave
         <button type="button" className="admin-back" style={{ color: palette.gold }} onClick={() => navigate('/')}>
           <ArrowLeft size={15} />{t('adminBack')}
         </button>
-        <div>
-          <p className="admin-kicker" style={{ color: palette.gold }}>{t('admin')}</p>
-          <h1 style={{ color: palette.text }}>{t(page === 'settings' ? 'adminSettings' : page === 'mods' ? 'adminMods' : 'adminFeedback')}</h1>
-          <p style={{ color: palette.muted }}>{t(page === 'settings' ? 'adminSettingsSubtitle' : page === 'mods' ? 'adminModsSubtitle' : 'adminFeedbackSubtitle')}</p>
-        </div>
+        <h1 style={{ color: palette.text }}>{t(page === 'settings' ? 'adminSettings' : page === 'mods' ? 'adminMods' : 'adminFeedback')}</h1>
       </header>
       <nav className="admin-nav" aria-label={t('adminNav')} style={{ background: palette.surface }}>
         {adminPages.map((entry) => {
@@ -138,6 +136,8 @@ function ModsPage({ mods, onSaveMod, onAddMod, onDeleteMod }: Pick<Props, 'mods'
         gameVersion: String(form.get('gameVersion') ?? ''),
         modVersion: String(form.get('modVersion') ?? ''),
         icon: iconFor(item),
+        steamUrl: String(form.get('steamUrl') ?? ''),
+        githubUrl: String(form.get('githubUrl') ?? ''),
       });
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('modFailed'));
@@ -190,6 +190,10 @@ function ModsPage({ mods, onSaveMod, onAddMod, onDeleteMod }: Pick<Props, 'mods'
               <Field label={t('gameVersion')}><input name="gameVersion" required maxLength={40} defaultValue={item.gameVersion} style={control} /></Field>
               <Field label={t('modVersion')}><input name="modVersion" required maxLength={40} defaultValue={item.modVersion} style={control} /></Field>
             </div>
+            <div className="form-two">
+              <Field label={t('steamLink')}><input name="steamUrl" type="url" maxLength={500} defaultValue={item.steamUrl} placeholder="https://" style={control} /></Field>
+              <Field label={t('githubLink')}><input name="githubUrl" type="url" maxLength={500} defaultValue={item.githubUrl} placeholder="https://" style={control} /></Field>
+            </div>
             <IconPicker value={picked} onChange={(key) => setModIcons((current) => ({ ...current, [item.id]: key }))} />
             <div className="admin-actions">
               <ActionButton className="form-submit" disabled={busy}>{busy ? t('savingMod') : t('saveMod')}</ActionButton>
@@ -203,12 +207,16 @@ function ModsPage({ mods, onSaveMod, onAddMod, onDeleteMod }: Pick<Props, 'mods'
       <form className="admin-record" style={{ background: palette.surface }} onSubmit={(event) => void addMod(event)}>
         <h2 style={{ color: palette.text }}>{t('addMod')}</h2>
         <div className="form-two">
-          <Field label={t('modSlug')}><input name="slug" required maxLength={40} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder={t('modSlugHint')} value={draft.slug} onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))} style={control} /></Field>
+          <Field label={t('modSlug')}><input name="slug" required maxLength={40} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="rhah" value={draft.slug} onChange={(event) => setDraft((current) => ({ ...current, slug: event.target.value }))} style={control} /></Field>
           <Field label={t('modName')}><input name="name" required maxLength={40} value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} style={control} /></Field>
         </div>
         <div className="form-two">
           <Field label={t('gameVersion')}><input name="gameVersion" required maxLength={40} value={draft.gameVersion} onChange={(event) => setDraft((current) => ({ ...current, gameVersion: event.target.value }))} style={control} /></Field>
           <Field label={t('modVersion')}><input name="modVersion" required maxLength={40} value={draft.modVersion} onChange={(event) => setDraft((current) => ({ ...current, modVersion: event.target.value }))} style={control} /></Field>
+        </div>
+        <div className="form-two">
+          <Field label={t('steamLink')}><input name="steamUrl" type="url" maxLength={500} value={draft.steamUrl} placeholder="https://" onChange={(event) => setDraft((current) => ({ ...current, steamUrl: event.target.value }))} style={control} /></Field>
+          <Field label={t('githubLink')}><input name="githubUrl" type="url" maxLength={500} value={draft.githubUrl} placeholder="https://" onChange={(event) => setDraft((current) => ({ ...current, githubUrl: event.target.value }))} style={control} /></Field>
         </div>
         <IconPicker value={newIcon} onChange={setNewIcon} />
         <ActionButton className="form-submit" disabled={pending === 'new'}>{pending === 'new' ? t('addingMod') : <><Plus size={14} />{t('addMod')}</>}</ActionButton>

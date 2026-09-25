@@ -2,6 +2,8 @@ package domain
 
 import (
 	"errors"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -23,7 +25,9 @@ const (
 	StatusClosed     = "closed"
 	StatusWithdrawn  = "withdrawn"
 
-	DefaultModSlug = "rhah"
+	DefaultModSlug   = "rhah"
+	DefaultSteamURL  = "https://steamcommunity.com/sharedfiles/filedetails/?id="
+	DefaultGitHubURL = "https://github.com/Nanaloveyuki/modders_feedback"
 )
 
 type Feedback struct {
@@ -97,6 +101,8 @@ type Mod struct {
 	GameVersion string `json:"gameVersion"`
 	ModVersion  string `json:"modVersion"`
 	Icon        string `json:"icon"`
+	SteamURL    string `json:"steamUrl"`
+	GitHubURL   string `json:"githubUrl"`
 }
 
 type ModInput struct {
@@ -105,6 +111,8 @@ type ModInput struct {
 	GameVersion string `json:"gameVersion"`
 	ModVersion  string `json:"modVersion"`
 	Icon        string `json:"icon"`
+	SteamURL    string `json:"steamUrl"`
+	GitHubURL   string `json:"githubUrl"`
 }
 
 func ValidCategory(category string) bool {
@@ -136,6 +144,16 @@ func ValidSlug(slug string) bool {
 		return false
 	}
 	return slug[0] != '-' && slug[len(slug)-1] != '-'
+}
+func ValidOptionalURL(value string) bool {
+	if value == "" {
+		return true
+	}
+	if len(value) > 500 || strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+	parsed, err := url.ParseRequestURI(value)
+	return err == nil && (parsed.Scheme == "http" || parsed.Scheme == "https") && parsed.Host != ""
 }
 
 func ValidStatus(status string) bool {

@@ -191,7 +191,7 @@ export function App() {
 
   return (
     <>
-      <Topbar user={user} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { if (user?.role === 'admin') navigate(adminPath('settings')); }} />
+      <Topbar user={user} mod={activeMod} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { if (user?.role === 'admin') navigate(adminPath('settings')); }} />
       {route.name === 'admin' ? (
         user?.role === 'admin' ? (
           <AdminPanel page={route.page} items={adminItems} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} />
@@ -239,7 +239,6 @@ export function App() {
       {modal && (
         <Modal
           title={modal === 'login' ? t('loginTitle') : modal === 'register' ? t('registerTitle') : t('create')}
-          subtitle={modal === 'login' ? t('loginSubtitle') : modal === 'register' ? t('registerSubtitle') : t('createSubtitle')}
           onClose={() => setModal(null)}
         >
           {modal === 'login' || modal === 'register' ? <LoginForm mode={modal} onSubmit={modal === 'register' ? submitRegister : async (username, password) => submitLogin(username, password)} onSwitch={() => setModal(modal === 'register' ? 'login' : 'register')} /> : <FeedbackForm onSubmit={submitFeedback} />}

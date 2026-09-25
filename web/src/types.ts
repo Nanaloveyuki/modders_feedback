@@ -65,6 +65,8 @@ export type Mod = {
   gameVersion: string;
   modVersion: string;
   icon: SiteIcon;
+  steamUrl: string;
+  githubUrl: string;
 };
 
 export type ModInput = {
@@ -73,4 +75,6 @@ export type ModInput = {
   gameVersion: string;
   modVersion: string;
   icon: SiteIcon;
+  steamUrl: string;
+  githubUrl: string;
 };

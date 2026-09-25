@@ -3,11 +3,12 @@ import { nextLocale, useI18n } from '../i18n/context';
 import { siteIcons } from '../lib/icons';
 import { navigate } from '../router';
 import { useTheme } from '../theme/context';
-import type { SiteIcon, User } from '../types';
+import type { Mod, SiteIcon, User } from '../types';
 import { IconButton } from './ui';
 
 type Props = {
   user: User | null;
+  mod?: Mod;
   icon: SiteIcon;
   name?: string;
   onLogin: () => void;
@@ -15,7 +16,7 @@ type Props = {
   onAdmin: () => void;
 };
 
-export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) {
+export function Topbar({ user, mod, icon, name, onLogin, onLogout, onAdmin }: Props) {
   const { locale, setLocale, t } = useI18n();
   const { dark, palette, toggle } = useTheme();
   const themeLabel = dark ? t('themeToLight') : t('themeToDark');
@@ -33,11 +34,11 @@ export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) 
       <nav className="top-links" aria-label={t('navLabel')} style={{ color: palette.muted }}>
         <span className="build-tag" style={{ color: palette.gold }}>
           <span className="live-dot" style={{ background: palette.gold, boxShadow: `0 0 11px ${palette.gold}` }} />
-          RIMWORLD 1.6
+          {mod?.gameVersion || 'RIMWORLD 1.6'}
         </span>
-        <span className="nav-divider" style={{ background: palette.line }} />
-        <a href="https://steamcommunity.com/sharedfiles/filedetails/?id=" target="_blank" rel="noreferrer">{t('workshop')} <ExternalLink size={13} /></a>
-        <a href="https://github.com/Nanaloveyuki/modders_feedback" target="_blank" rel="noreferrer" aria-label={t('projectHome')}><Github size={15} /></a>
+        {(mod?.steamUrl || mod?.githubUrl) && <span className="nav-divider" style={{ background: palette.line }} />}
+        {mod?.steamUrl && <a href={mod.steamUrl} target="_blank" rel="noreferrer">{t('workshop')} <ExternalLink size={13} /></a>}
+        {mod?.githubUrl && <a href={mod.githubUrl} target="_blank" rel="noreferrer" aria-label={t('projectHome')}><Github size={15} /></a>}
       </nav>
       <div className="account-area" style={{ color: palette.muted }}>
         <button
