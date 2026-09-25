@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n/context';
+import { AttachmentEditor, editorTarget } from './AttachmentEditor';
 import { siteIconKeys, siteIcons } from '../lib/icons';
 import { useLabels } from '../lib/labels';
 import { adminPages, adminPath, navigate, type AdminPage } from '../router';
@@ -89,6 +90,7 @@ function SettingsPage({ settings, onSaveSettings }: Pick<Props, 'settings' | 'on
         modVersion: String(form.get('modVersion') ?? ''),
         gameVersion: String(form.get('gameVersion') ?? ''),
         icon,
+        attachmentDir: String(form.get('attachmentDir') ?? ''),
       });
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('settingsFailed'));
@@ -103,6 +105,7 @@ function SettingsPage({ settings, onSaveSettings }: Pick<Props, 'settings' | 'on
         <Field label={t('currentMod')}><input name="modVersion" required maxLength={40} defaultValue={settings.modVersion} style={control} /></Field>
         <Field label={t('gameVersion')}><input name="gameVersion" required maxLength={40} defaultValue={settings.gameVersion} style={control} /></Field>
       </div>
+      <Field label={t('attachmentDir')}><input name="attachmentDir" required maxLength={240} defaultValue={settings.attachmentDir} style={control} /></Field>
       <IconPicker value={icon} onChange={setIcon} />
       {error && <p className="form-error" role="alert" style={{ color: palette.danger }}>{error}</p>}
       <ActionButton className="form-submit" disabled={pending}>{pending ? t('savingSettings') : t('saveSettings')}</ActionButton>
@@ -228,21 +231,24 @@ function ModsPage({ mods, onSaveMod, onAddMod, onDeleteMod }: Pick<Props, 'mods'
 
 function FeedbackPage({ items, onSaveRecord, onDeleteRecord }: Pick<Props, 'items' | 'onSaveRecord' | 'onDeleteRecord'>) {
   const { t } = useI18n();
-  const labels = useLabels();
   const { palette } = useTheme();
-  const control = { color: palette.text, background: palette.field };
   const [pending, setPending] = useState<number | null>(null);
   const [error, setError] = useState('');
 
-  async function saveRecord(event: FormEvent<HTMLFormElement>, item: Feedback) {
+  async function saveRecord(event: FormEvent<HTMLFormElement>, item: Feedback, body: string) {
     event.preventDefault();
+    const length = [...body.trim()].length;
+    if (length < 10 || length > 12000) {
+      setError(t('bodyLength'));
+      return;
+    }
     const form = new FormData(event.currentTarget);
     setPending(item.id);
     setError('');
     try {
       await onSaveRecord(item, {
         title: String(form.get('title') ?? ''),
-        body: String(form.get('body') ?? ''),
+        body,
         gameVersion: String(form.get('gameVersion') ?? ''),
         modVersion: String(form.get('modVersion') ?? ''),
         modList: String(form.get('modList') ?? ''),
@@ -271,33 +277,45 @@ function FeedbackPage({ items, onSaveRecord, onDeleteRecord }: Pick<Props, 'item
   return (
     <div className="admin-records">
       {items.length === 0 && <p className="admin-empty" style={{ color: palette.faint }}>{t('adminEmpty')}</p>}
-      {items.map((item) => {
-        const busy = pending === item.id;
-        return (
-          <form key={`${item.id}-${item.title}-${item.body}`} className="admin-record" style={{ background: palette.surface }} onSubmit={(event) => void saveRecord(event, item)}>
-            <div className="admin-record-head" style={{ color: palette.faint }}>
-              <span>{labels.category(item.category)} / {(item.categoryNumber ?? item.id).toString().padStart(3, '0')}</span>
-              <span>{item.author}</span>
-            </div>
-            <Field label={t('title')}><input name="title" required minLength={5} maxLength={120} defaultValue={item.title} style={control} /></Field>
-            <Field label={t('description')}><textarea name="body" required minLength={10} maxLength={12000} rows={4} defaultValue={item.body} style={control} /></Field>
-            <div className="form-two">
-              <Field label={t('gameVersionField')}><input name="gameVersion" maxLength={40} defaultValue={item.gameVersion} style={control} /></Field>
-              <Field label={t('modVersion')}><input name="modVersion" maxLength={80} defaultValue={item.modVersion} style={control} /></Field>
-            </div>
-            <Field label={t('modList')}><textarea name="modList" maxLength={6000} rows={2} defaultValue={item.modList} style={control} /></Field>
-            <Field label={t('saveLink')}><input name="saveLink" maxLength={500} defaultValue={item.saveLink} style={control} /></Field>
-            <div className="admin-actions">
-              <ActionButton className="form-submit" disabled={busy}>{busy ? t('savingRecord') : t('saveRecord')}</ActionButton>
-              <button type="button" className="danger-button" disabled={busy} onClick={() => void remove(item)} style={{ color: palette.danger, background: palette.hover }}>
-                <Trash2 size={14} />{busy ? t('deletingRecord') : t('deleteRecord')}
-              </button>
-            </div>
-          </form>
-        );
-      })}
+      {items.map((item) => (
+        <AdminRecord key={`${item.id}-${item.title}-${item.body}`} item={item} busy={pending === item.id} onSave={saveRecord} onRemove={(entry) => void remove(entry)} />
+      ))}
       {error && <p className="form-error" role="alert" style={{ color: palette.danger }}>{error}</p>}
     </div>
+  );
+}
+
+function AdminRecord({ item, busy, onSave, onRemove }: { item: Feedback; busy: boolean; onSave: (event: FormEvent<HTMLFormElement>, item: Feedback, body: string) => void; onRemove: (item: Feedback) => void }) {
+  const { t, locale } = useI18n();
+  const labels = useLabels();
+  const { palette } = useTheme();
+  const control = { color: palette.text, background: palette.field };
+  const [body, setBody] = useState(item.body);
+  const [preview, setPreview] = useState(false);
+  return (
+    <form className="admin-record" style={{ background: palette.surface }} onSubmit={(event) => onSave(event, item, body)}>
+      <div className="admin-record-head" style={{ color: palette.faint }}>
+        <span>{labels.category(item.category)} / {(item.categoryNumber ?? item.id).toString().padStart(3, '0')}</span>
+        <span>{item.author}</span>
+      </div>
+      <Field label={t('title')}><input name="title" required minLength={5} maxLength={120} defaultValue={item.title} style={control} /></Field>
+      <Field label={t('description')}>
+        <AttachmentEditor body={body} onBody={setBody} preview={preview} rows={6} locale={locale} target={editorTarget(item.id)} control={control} onError={() => undefined} />
+      </Field>
+      <button type="button" className="form-switch own-edit" style={{ color: palette.gold }} onClick={() => setPreview((current) => !current)}>{preview ? t('writeMarkdown') : t('previewMarkdown')}</button>
+      <div className="form-two">
+        <Field label={t('gameVersionField')}><input name="gameVersion" maxLength={40} defaultValue={item.gameVersion} style={control} /></Field>
+        <Field label={t('modVersion')}><input name="modVersion" maxLength={80} defaultValue={item.modVersion} style={control} /></Field>
+      </div>
+      <Field label={t('modList')}><textarea name="modList" maxLength={6000} rows={2} defaultValue={item.modList} style={control} /></Field>
+      <Field label={t('saveLink')}><input name="saveLink" maxLength={500} defaultValue={item.saveLink} style={control} /></Field>
+      <div className="admin-actions">
+        <ActionButton className="form-submit" disabled={busy}>{busy ? t('savingRecord') : t('saveRecord')}</ActionButton>
+        <button type="button" className="danger-button" disabled={busy} onClick={() => onRemove(item)} style={{ color: palette.danger, background: palette.hover }}>
+          <Trash2 size={14} />{busy ? t('deletingRecord') : t('deleteRecord')}
+        </button>
+      </div>
+    </form>
   );
 }
 

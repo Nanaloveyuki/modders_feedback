@@ -4,6 +4,7 @@ export type Route =
   | { name: 'board' }
   | { name: 'feedback'; slug: string; category: Category; publicId: string }
   | { name: 'admin'; page: AdminPage }
+  | { name: 'compose' }
   | { name: 'account' };
 
 export type AdminPage = 'settings' | 'mods' | 'feedback';
@@ -23,6 +24,7 @@ export function parseRoute(pathname: string): Route {
     return { name: 'admin', page: 'settings' };
   }
   if (path === '/account') return { name: 'account' };
+  if (path === '/new') return { name: 'compose' };
   const item = path.match(/^\/mod\/([a-z0-9]+(?:-[a-z0-9]+)*)\/(bugs|feature|question)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
   if (item) {
     const category: Category = item[2] === 'bugs' ? 'bug' : item[2] === 'feature' ? 'feature' : 'question';

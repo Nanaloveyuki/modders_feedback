@@ -18,4 +18,5 @@ export const defaultSettings = {
   modVersion: 'DEV BUILD',
   gameVersion: 'RIMWORLD 1.6',
   icon: 'squirrel' as SiteIcon,
+  attachmentDir: '',
 };

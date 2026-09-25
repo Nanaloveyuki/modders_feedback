@@ -42,6 +42,16 @@ export function useLabels() {
 }
 
 export function excerpt(body: string) {
-  const compact = body.replace(/\s+/g, ' ');
+  const compact = body
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!\[[^\]]*]\([^)]*\)/g, ' ')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/<\/?[a-z][^>]*>/gi, ' ')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/[*_~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   return compact.length > 122 ? `${compact.slice(0, 122)}…` : compact;
 }

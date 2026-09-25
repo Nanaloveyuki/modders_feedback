@@ -1,5 +1,5 @@
 import type { Locale } from '../i18n/messages';
-import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, ProfileUpdate, SiteSettings, Status, User } from '../types';
+import type { Attachment, Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, ProfileUpdate, SiteSettings, Status, User } from '../types';
 import { api } from './client';
 
 export async function listFeedback(mod: string, category: Category | 'all', locale: Locale) {
@@ -86,4 +86,18 @@ export function updateMod(id: number, data: ModInput, locale: Locale) {
 
 export function deleteMod(id: number, locale: Locale) {
   return api<void>(`/mods/${id}`, locale, { method: 'DELETE' });
+}
+
+export type UploadTarget = { kind: 'draft' } | { kind: 'feedback'; id: number };
+
+export async function uploadAttachment(target: UploadTarget, file: File, locale: Locale) {
+  const body = new FormData();
+  body.set('file', file);
+  const path = target.kind === 'draft' ? '/attachments' : `/feedback/${target.id}/attachments`;
+  const response = await fetch(`/api${path}`, { method: 'POST', body, headers: { 'Accept-Language': locale } });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({ error: '' }));
+    throw new Error(result.error || 'upload failed');
+  }
+  return response.json() as Promise<Attachment>;
 }

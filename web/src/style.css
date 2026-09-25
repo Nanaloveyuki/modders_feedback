@@ -285,7 +285,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .pagination button:disabled { cursor: default; color: var(--faint); opacity: .55; }
 
 
-.modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 16px; background: var(--scrim); backdrop-filter: blur(6px); animation: fade-in .16s both; }
+.modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 16px; background: var(--scrim); backdrop-filter: blur(6px); animation: fade-in .16s both; overflow: auto; }
 .modal-panel {
   width: min(520px, 100%);
   max-height: min(88vh, 850px);
@@ -343,38 +343,74 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   cursor: pointer;
   box-shadow: 0 4px 12px var(--shadow);
 }
-.detail-panel { width: min(640px, 100%); padding: 22px; }
-.detail-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.detail-title { font-size: clamp(18px, 3vw, 24px); line-height: 1.45; margin: 16px 0 12px; color: var(--text); overflow-wrap: anywhere; }
-.detail-byline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--faint); font-size: 12px; }
-.detail-byline strong { color: var(--text); font-weight: 650; }
-.detail-body { margin: 18px 0; font-size: 14px; line-height: 1.8; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
-.detail-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  padding: 4px 0 0;
-}
-.detail-facts > div {
+.issue-page {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  flex: 1;
   display: grid;
   align-content: start;
-  justify-items: start;
-  gap: 6px;
-  padding: 12px;
-  background: var(--surface-raised);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 6px 14px var(--shadow);
+  gap: 16px;
+  padding: 18px 0 72px;
 }
-.detail-facts > div > span:first-child { color: var(--faint); font: 10px var(--mono); letter-spacing: .06em; }
-.detail-facts strong:not(.status-pill) { color: var(--muted); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
-.detail-extra h3 { color: var(--faint); font: 11px var(--mono); letter-spacing: .04em; margin: 16px 0 8px; }
-.detail-extra pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); background: var(--surface-raised); padding: 12px; font: 12px/1.7 var(--mono); border: 0; border-radius: var(--radius-sm); box-shadow: 0 6px 14px var(--shadow); }
+.issue-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 0; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.issue-header { display: grid; gap: 12px; }
+.issue-header h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); line-height: 1.25; font-weight: 750; overflow-wrap: anywhere; }
+.issue-header h1 span { margin-left: 10px; font-weight: 500; }
+.issue-meta, .issue-opened, .issue-comment-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.issue-meta { font-size: 13px; }
+.issue-opened { gap: 6px; }
+.issue-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: start; }
+.issue-main { min-width: 0; border-radius: 18px; box-shadow: var(--card-shadow); overflow: hidden; }
+.issue-comment-head { padding: 12px 18px; background: var(--surface-raised); font-size: 13px; }
+.issue-comment-head strong { font-weight: 700; }
+.issue-edit { margin-left: auto; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.issue-main .detail-body { margin: 0; padding: 18px 20px 22px; font-size: 15px; line-height: 1.75; }
+.issue-editor { padding: 16px 18px 18px; }
+.issue-editor-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.issue-editor-actions .form-submit { width: 100%; }
+.issue-side { display: grid; gap: 12px; }
+.issue-side section { display: grid; gap: 8px; justify-items: start; padding: 14px; border-radius: 16px; box-shadow: var(--card-shadow); }
+.issue-side h2 { margin: 0; font: 11px var(--mono); letter-spacing: .06em; }
+.issue-side strong:not(.status-pill) { font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.issue-side pre { margin: 0; width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 var(--mono); }
+.issue-side .status-editor, .issue-side .save-link { margin-top: 0; width: 100%; }
+.issue-side .status-editor select { width: 100%; }
+.issue-copy { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.compose-categories { display: grid; gap: 8px; width: 100%; }
+.compose-categories button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 10px; cursor: pointer; font-size: 12px; }
+.compose-preview { min-height: 360px; }
+.issue-editor { display: grid; gap: 14px; }
+.issue-editor textarea, .issue-editor .markdown-preview, .issue-editor input, .issue-side input, .issue-side textarea { width: 100%; box-sizing: border-box; }
+.issue-side .form-submit { width: 100%; }
+.detail-body { margin: 18px 0; font-size: 14px; line-height: 1.8; color: var(--text); overflow-wrap: anywhere; }
+
+.attachment-editor { display: grid; gap: 8px; }
+.attachment-editor.over textarea, .attachment-editor.over .markdown-preview { outline: 2px dashed var(--gold); outline-offset: 2px; }
+.attachment-bar { display: flex; align-items: center; gap: 8px; }
+.attachment-bar button { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: var(--gold); cursor: pointer; font-size: 12px; }
+.attachment-bar button:disabled { cursor: wait; opacity: .7; }
+.attachment-bar input { display: none; }
+.markdown-preview { min-height: 168px; padding: 10px 12px; border: 0; border-radius: var(--radius-sm); box-shadow: inset 0 1px 2px rgba(40, 48, 72, .04); }
+.markdown-body { overflow-wrap: anywhere; }
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body p, .markdown-body ul, .markdown-body ol, .markdown-body blockquote, .markdown-body pre, .markdown-body table { margin: 0 0 12px; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { margin: 16px 0 8px; line-height: 1.35; font-size: 16px; }
+.markdown-body h1 { font-size: 20px; }
+.markdown-body h2 { font-size: 18px; }
+.markdown-body ul, .markdown-body ol { padding-left: 1.3em; }
+.markdown-body a { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body code { font: 12px/1.6 var(--mono); padding: 1px 4px; border-radius: 6px; background: var(--surface-raised); }
+.markdown-body pre { overflow: auto; padding: 12px; border-radius: var(--radius-sm); background: var(--surface-raised); box-shadow: 0 6px 14px var(--shadow); }
+.markdown-body pre code { padding: 0; background: transparent; }
+.markdown-body blockquote { padding-left: 12px; color: var(--muted); border-left: 3px solid color-mix(in srgb, var(--gold) 55%, transparent); }
+.markdown-body img { max-width: 100%; height: auto; border-radius: 10px; }
+.markdown-body table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.markdown-body th, .markdown-body td { padding: 6px 8px; text-align: left; border-bottom: 1px solid color-mix(in srgb, var(--faint) 35%, transparent); }
+.markdown-body input[type="checkbox"] { width: auto; margin-right: 6px; }
 .save-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; color: var(--gold); font-size: 12px; }
 .status-editor { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 16px; color: var(--muted); font-size: 12px; }
 .status-editor select { width: auto; min-width: 0; max-width: 100%; padding: 8px 10px; }
-.detail-bottom { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 18px; padding-top: 4px; color: var(--faint); }
-.detail-bottom > span { font-size: 11px; }
-.detail-bottom button { display: inline-flex; align-items: center; gap: 6px; color: var(--gold); background: transparent; border: 0; cursor: pointer; font-size: 12px; }
 .admin-page {
   width: min(960px, calc(100% - 32px));
   margin: 0 auto;
@@ -449,6 +485,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .feedback-row { grid-template-columns: minmax(0, 1fr) auto auto; }
   .row-author, .row-time { display: none; }
   .row-meta-mobile { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 11px; }
+  .issue-layout { grid-template-columns: minmax(0, 1fr); }
+  .issue-side { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 }
 
 @media (max-width: 720px) {

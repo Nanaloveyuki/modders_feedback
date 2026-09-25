@@ -30,8 +30,7 @@ export function App() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState<'new' | 'old'>('new');
-  const [modal, setModal] = useState<'login' | 'register' | 'create' | null>(null);
-  const [selected, setSelected] = useState<Feedback | null>(null);
+  const [modal, setModal] = useState<'login' | 'register' | null>(null);
   const [routed, setRouted] = useState<Feedback | null>(null);
   const [routeMissing, setRouteMissing] = useState(false);
   const [error, setError] = useState('');
@@ -114,7 +113,11 @@ export function App() {
 
   function openComposer() {
     setError('');
-    setModal(user ? 'create' : 'login');
+    if (!user) {
+      setModal('login');
+      return;
+    }
+    navigate('/new');
   }
 
   async function signOut() {
@@ -145,9 +148,10 @@ export function App() {
     setAdminItems((previous) => [created, ...previous]);
     setFilter(data.category);
     setStatus('all');
-    setModal(null);
     setError('');
     setNotice(t('published'));
+    if (created.publicId) navigate(feedbackPath(modSlug, created.category, created.publicId));
+    else navigate('/');
   }
 
   function selectMod(slug: string) {
@@ -155,18 +159,14 @@ export function App() {
     setQuery('');
     setStatus('all');
     setPage(1);
-    setSelected(null);
     if (route.name === 'feedback') navigate('/');
     void refresh(slug);
   }
 
   function openFeedback(item: Feedback) {
     const slug = mods.find((mod) => mod.id === item.modId)?.slug ?? modSlug;
-    if (item.publicId) {
-      navigate(feedbackPath(slug, item.category, item.publicId));
-      return;
-    }
-    setSelected(item);
+    if (!item.publicId) return;
+    navigate(feedbackPath(slug, item.category, item.publicId));
   }
 
   async function addMod(input: ModInput) {
@@ -204,7 +204,6 @@ export function App() {
     const saved = await updateFeedback(item.id, update, locale);
     setItems((previous) => previous.map((entry) => entry.id === item.id ? saved : entry));
     setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? saved : entry));
-    setSelected((previous) => previous?.id === item.id ? saved : previous);
     setRouted((previous) => previous?.id === item.id ? saved : previous);
     setNotice(t('recordSaved'));
   }
@@ -213,7 +212,6 @@ export function App() {
     await deleteFeedback(item.id, locale);
     setItems((previous) => previous.filter((entry) => entry.id !== item.id));
     setAdminItems((previous) => previous.filter((entry) => entry.id !== item.id));
-    setSelected((previous) => previous?.id === item.id ? null : previous);
     setRouted((previous) => previous?.id === item.id ? null : previous);
     if (route.name === 'feedback' && route.publicId === item.publicId) navigate('/');
     setNotice(t('recordDeleted'));
@@ -224,7 +222,6 @@ export function App() {
       await updateStatus(item.id, next, locale);
       setItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
       setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
-      setSelected((previous) => previous?.id === item.id ? { ...previous, status: next } : previous);
       setRouted((previous) => previous?.id === item.id ? { ...previous, status: next } : previous);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('statusFailed'));
@@ -252,6 +249,22 @@ export function App() {
             <button type="button" className="create-button" onClick={() => setModal('login')}>{t('login')}</button>
           </main>
         )
+      ) : route.name === 'compose' ? (
+        user ? <FeedbackForm mod={activeMod} settings={settings} onSubmit={submitFeedback} /> : (
+          <main className="admin-denied">
+            <h1 style={{ color: palette.text }}>{t('create')}</h1>
+            <button type="button" className="create-button" onClick={() => setModal('login')}>{t('login')}</button>
+          </main>
+        )
+      ) : route.name === 'feedback' && routeMissing ? (
+        <main className="admin-denied">
+          <h1 style={{ color: palette.text }}>{t('feedbackMissing')}</h1>
+          <button type="button" className="create-button" onClick={() => navigate('/')}>{t('adminBack')}</button>
+        </main>
+      ) : route.name === 'feedback' && routed ? (
+        <Detail item={routed} modSlug={mods.find((mod) => mod.id === routed.modId)?.slug ?? modSlug} canManage={user?.role === 'admin'} canEdit={Boolean(user && routed.author === user.username)} onStatus={changeStatus} onSave={saveRecord} />
+      ) : route.name === 'feedback' ? (
+        <main className="admin-denied"><span className="loading-dash" /></main>
       ) : (
       <main id="top" className="main-layout">
         <Sidebar filter={filter} settings={settings} mods={mods} modSlug={modSlug} count={count} onFilter={setFilter} onMod={selectMod} />
@@ -280,19 +293,12 @@ export function App() {
       {notice && <Notice kind="ok" closeLabel={t('closeNotice')} onClose={() => setNotice('')} closeIcon={<X size={15} />}><Check size={16} />{notice}</Notice>}
       {modal && (
         <Modal
-          title={modal === 'login' ? t('loginTitle') : modal === 'register' ? t('registerTitle') : t('create')}
+          title={modal === 'register' ? t('registerTitle') : t('loginTitle')}
           onClose={() => setModal(null)}
         >
-          {modal === 'login' || modal === 'register' ? <LoginForm mode={modal} onSubmit={modal === 'register' ? submitRegister : async (username, password) => submitLogin(username, password)} onSwitch={() => setModal(modal === 'register' ? 'login' : 'register')} /> : <FeedbackForm onSubmit={submitFeedback} />}
+          {modal === 'register' ? <LoginForm mode="register" onSubmit={submitRegister} onSwitch={() => setModal('login')} /> : <LoginForm mode="login" onSubmit={async (username, password) => submitLogin(username, password)} onSwitch={() => setModal('register')} />}
         </Modal>
       )}
-      {route.name === 'feedback' && routeMissing && (
-        <main className="admin-denied">
-          <h1 style={{ color: palette.text }}>{t('feedbackMissing')}</h1>
-          <button type="button" className="create-button" onClick={() => navigate('/')}>{t('adminBack')}</button>
-        </main>
-      )}
-      {(routed ?? selected) && <Detail item={(routed ?? selected)!} modSlug={mods.find((mod) => mod.id === (routed ?? selected)!.modId)?.slug ?? modSlug} canManage={user?.role === 'admin'} canEdit={Boolean(user && (routed ?? selected)!.author === user.username)} onClose={() => { if (route.name === 'feedback') navigate('/'); else setSelected(null); }} onStatus={changeStatus} onSave={saveRecord} />}
     </>
   );
 }

@@ -3,15 +3,17 @@ package domain
 import (
 	"errors"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 var (
-	ErrLastMod       = errors.New("cannot delete the last mod")
-	ErrUsernameTaken = errors.New("username already exists")
-	ErrEmailTaken    = errors.New("email already exists")
-	ErrBadPassword   = errors.New("current password is incorrect")
+	ErrLastMod           = errors.New("cannot delete the last mod")
+	ErrUsernameTaken     = errors.New("username already exists")
+	ErrEmailTaken        = errors.New("email already exists")
+	ErrBadPassword       = errors.New("current password is incorrect")
+	ErrAttachmentMissing = errors.New("attachment was not found")
 )
 
 const (
@@ -31,20 +33,29 @@ const (
 )
 
 type Feedback struct {
-	ID             int64     `json:"id"`
-	PublicID       string    `json:"publicId"`
-	ModID          int64     `json:"modId"`
-	Category       string    `json:"category"`
-	CategoryNumber int64     `json:"categoryNumber"`
-	Title          string    `json:"title"`
-	Body           string    `json:"body"`
-	Author         string    `json:"author"`
-	GameVersion    string    `json:"gameVersion"`
-	ModVersion     string    `json:"modVersion"`
-	ModList        string    `json:"modList"`
-	SaveLink       string    `json:"saveLink"`
-	Status         string    `json:"status"`
-	CreatedAt      time.Time `json:"createdAt"`
+	ID             int64        `json:"id"`
+	PublicID       string       `json:"publicId"`
+	ModID          int64        `json:"modId"`
+	Category       string       `json:"category"`
+	CategoryNumber int64        `json:"categoryNumber"`
+	Title          string       `json:"title"`
+	Body           string       `json:"body"`
+	Author         string       `json:"author"`
+	GameVersion    string       `json:"gameVersion"`
+	ModVersion     string       `json:"modVersion"`
+	ModList        string       `json:"modList"`
+	SaveLink       string       `json:"saveLink"`
+	Status         string       `json:"status"`
+	CreatedAt      time.Time    `json:"createdAt"`
+	Attachments    []Attachment `json:"attachments"`
+}
+
+type Attachment struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+	URL         string `json:"url"`
 }
 
 type Credentials struct {
@@ -91,9 +102,10 @@ type FeedbackUpdate struct {
 }
 
 type SiteSettings struct {
-	ModVersion  string `json:"modVersion"`
-	GameVersion string `json:"gameVersion"`
-	Icon        string `json:"icon"`
+	ModVersion    string `json:"modVersion"`
+	GameVersion   string `json:"gameVersion"`
+	Icon          string `json:"icon"`
+	AttachmentDir string `json:"attachmentDir"`
 }
 type Mod struct {
 	ID          int64  `json:"id"`
@@ -206,4 +218,16 @@ func ValidPublicID(value string) bool {
 
 func FeedbackPath(slug, category, publicID string) string {
 	return "/mod/" + slug + "/" + PublicCategory(category) + "/" + publicID
+}
+
+const (
+	MaxAttachmentBytes = 12 << 20
+	MaxAttachments     = 8
+)
+
+func ValidAttachmentDir(value string) bool {
+	if value == "" || len(value) > 240 || strings.Contains(value, "\x00") {
+		return false
+	}
+	return filepath.IsAbs(value) && !strings.Contains(value, "..")
 }

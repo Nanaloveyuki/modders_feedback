@@ -33,7 +33,7 @@ The Go service owns authentication, validation, SQLite access, API routing, stat
 ## Repository Rules
 
 - Preserve the existing Go + React + SQLite + Docker architecture unless the task explicitly changes it.
-- Keep the interface adapted to RimWorld mod feedback. Bug reports should retain fields for game version, mod version, mod list/load order, reproduction details, and optional save link.
+- Keep the interface adapted to RimWorld mod feedback. Bug reports should retain fields for game version, mod version, mod list/load order, reproduction details, and optional save link. Create and edit forms keep image paste and file attachment.
 - Keep the three category values exactly `bug`, `feature`, and `question`; they are enforced by the SQLite check constraint and API validation.
 - Keep status values exactly `open`, `in_progress`, `resolved`, `closed`, and `withdrawn`.
 - Public registration accepts a username, password, and optional email or QQ number. Do not store plaintext passwords, localStorage authentication tokens, or credentials in source control.
@@ -98,7 +98,9 @@ Important API behavior:
 - `GET /api/mods` is public and returns the selectable feedback mods.
 - `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require the administrator session. Each mod stores its own Steam and GitHub links, shown in the top bar for the selected mod. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
 - `GET /api/settings` is public and returns the displayed mod version, game version, and icon.
-- `PUT /api/settings` requires the administrator session.
+- `POST /api/attachments` requires a session and stores a draft file owned by the current user. `POST /api/feedback/{id}/attachments` requires the author or administrator. `GET /api/attachments/{id}` is public once saved feedback references the file; unpublished drafts stay private to the owner and administrator. Accepted files are PNG, JPEG, GIF, WebP, PDF, and plain text, up to 12MiB and 8 files per feedback item.
+- Uploaded bytes live in the administrator-configured attachment directory, defaulting to `$DATA_DIR/attachments`. Active feedback uses fast zstd compression. Resolved feedback is recompressed at the highest zstd level in the background, and reads still return the original bytes.
+- `PUT /api/settings` requires the administrator session. It can change the absolute attachment directory, and existing files move with that setting.
 
 ## Docker Deployment
 

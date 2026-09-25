@@ -9,9 +9,12 @@ import (
 	"image"
 	"image/draw"
 	"image/png"
+	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -64,6 +67,9 @@ func (h *Handler) Routes() *chi.Mux {
 	r.Patch("/api/feedback/{id}/status", h.updateStatus)
 	r.Patch("/api/feedback/{id}", h.updateFeedback)
 	r.Delete("/api/feedback/{id}", h.deleteFeedback)
+	r.Post("/api/feedback/{id}/attachments", h.uploadFeedbackAttachment)
+	r.Post("/api/attachments", h.uploadDraftAttachment)
+	r.Get("/api/attachments/{id}", h.getAttachment)
 	r.Get("/api/mods/{slug}/feedback/{category}/{publicId}", h.getPublicFeedback)
 	r.Get("/api/settings", h.getSettings)
 	r.Put("/api/settings", h.updateSettings)
@@ -499,15 +505,186 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 	input.ModVersion = strings.TrimSpace(input.ModVersion)
 	input.GameVersion = strings.TrimSpace(input.GameVersion)
 	input.Icon = strings.TrimSpace(input.Icon)
-	if !withinRunes(input.ModVersion, 1, 40) || !withinRunes(input.GameVersion, 1, 40) || !domain.ValidIcon(input.Icon) {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查版本号（1-40 字）和图标", "Check the versions (1-40 characters) and icon"))
+	input.AttachmentDir = strings.TrimSpace(input.AttachmentDir)
+	if !withinRunes(input.ModVersion, 1, 40) || !withinRunes(input.GameVersion, 1, 40) || !domain.ValidIcon(input.Icon) || !domain.ValidAttachmentDir(input.AttachmentDir) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查版本号（1-40 字）、图标和附件目录", "Check the versions (1-40 characters), icon, and attachment directory"))
 		return
+	}
+	current, err := h.store.SiteSettings()
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取站点设置失败", "Could not load site settings"))
+		return
+	}
+	if input.AttachmentDir != current.AttachmentDir {
+		if err = h.store.MoveAttachmentDir(current.AttachmentDir, input.AttachmentDir); err != nil {
+			httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "无法使用这个附件目录", "Could not use that attachment directory"))
+			return
+		}
 	}
 	if err := h.store.UpdateSiteSettings(input); err != nil {
 		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "保存站点设置失败", "Could not save site settings"))
 		return
 	}
 	httpx.JSON(w, http.StatusOK, input)
+}
+
+func (h *Handler) uploadDraftAttachment(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	name, contentType, raw, ok := readUpload(w, r)
+	if !ok {
+		return
+	}
+	saved, err := h.store.SaveDraftAttachment(user.Username, name, contentType, raw)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "上传失败", "Could not upload the file"))
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, saved)
+}
+
+func (h *Handler) uploadFeedbackAttachment(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	id, ok := feedbackID(w, r)
+	if !ok {
+		return
+	}
+	item, err := h.store.GetFeedback(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "上传失败", "Could not upload the file"))
+		return
+	}
+	if user.Role != "admin" && !authorOf(user, item) {
+		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能编辑自己的反馈", "You can only edit your own feedback"))
+		return
+	}
+	name, contentType, raw, ok := readUpload(w, r)
+	if !ok {
+		return
+	}
+	saved, err := h.store.SaveFeedbackAttachment(id, name, contentType, raw)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "上传失败", "Could not upload the file"))
+		return
+	}
+	httpx.JSON(w, http.StatusCreated, saved)
+}
+
+func (h *Handler) getAttachment(w http.ResponseWriter, r *http.Request) {
+	id := strings.ToLower(chi.URLParam(r, "id"))
+	meta, feedbackID, owner, _, err := h.store.Attachment(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取附件失败", "Could not load the attachment"))
+		return
+	}
+	if feedbackID == 0 {
+		user, ok := h.currentUser(w, r)
+		if !ok {
+			return
+		}
+		if user.Role != "admin" && user.Username != owner {
+			httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能查看自己的附件", "You can only view your own attachment"))
+			return
+		}
+	}
+	raw, meta, err := h.store.OpenAttachment(id)
+	if errors.Is(err, os.ErrNotExist) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取附件失败", "Could not load the attachment"))
+		return
+	}
+	w.Header().Set("Content-Type", meta.ContentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", contentDisposition(meta.Name, meta.ContentType))
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(raw)
+}
+
+func readUpload(w http.ResponseWriter, r *http.Request) (string, string, []byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, domain.MaxAttachmentBytes+4096)
+	if err := r.ParseMultipartForm(domain.MaxAttachmentBytes); err != nil {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "文件不能超过 12MiB", "The file must be 12MiB or smaller"))
+		return "", "", nil, false
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "缺少文件", "Missing file"))
+		return "", "", nil, false
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, domain.MaxAttachmentBytes+1))
+	if err != nil || len(raw) == 0 || len(raw) > domain.MaxAttachmentBytes {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "文件不能超过 12MiB", "The file must be 12MiB or smaller"))
+		return "", "", nil, false
+	}
+	name := cleanUploadName(header.Filename)
+	contentType := sniffType(name, raw)
+	if contentType == "" {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "不支持这个文件类型", "This file type is not supported"))
+		return "", "", nil, false
+	}
+	return name, contentType, raw, true
+}
+
+func cleanUploadName(value string) string {
+	value = path.Base(strings.ReplaceAll(value, "\\", "/"))
+	value = strings.TrimSpace(value)
+	if value == "." || value == "/" || value == "" {
+		return "file"
+	}
+	if len(value) > 120 {
+		value = value[:120]
+	}
+	return value
+}
+
+func sniffType(name string, raw []byte) string {
+	detected := http.DetectContentType(raw)
+	switch {
+	case strings.HasPrefix(detected, "image/png"):
+		return "image/png"
+	case strings.HasPrefix(detected, "image/jpeg"):
+		return "image/jpeg"
+	case strings.HasPrefix(detected, "image/gif"):
+		return "image/gif"
+	case strings.HasPrefix(detected, "image/webp"):
+		return "image/webp"
+	case strings.HasPrefix(detected, "application/pdf") || bytes.HasPrefix(raw, []byte("%PDF-")):
+		return "application/pdf"
+	case strings.HasPrefix(detected, "text/plain"):
+		ext := strings.ToLower(path.Ext(name))
+		if ext == ".log" || ext == ".txt" || ext == ".md" || ext == ".csv" {
+			return "text/plain; charset=utf-8"
+		}
+	}
+	return ""
+}
+
+func contentDisposition(name, contentType string) string {
+	if strings.HasPrefix(contentType, "image/") {
+		return "inline; filename*=UTF-8''" + urlEscape(name)
+	}
+	return "attachment; filename*=UTF-8''" + urlEscape(name)
+}
+
+func urlEscape(value string) string {
+	return url.PathEscape(value)
 }
 
 func feedbackID(w http.ResponseWriter, r *http.Request) (int64, bool) {

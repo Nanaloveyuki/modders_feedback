@@ -16,6 +16,15 @@ export type Feedback = {
   saveLink: string;
   status: Status;
   createdAt: string;
+  attachments: Attachment[];
+}
+
+export type Attachment = {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  url: string;
 };
 
 export type User = {
@@ -46,6 +55,7 @@ export type SiteSettings = {
   modVersion: string;
   gameVersion: string;
   icon: SiteIcon;
+  attachmentDir: string;
 };
 
 export type SiteIcon = 'squirrel' | 'rat' | 'bug' | 'spark' | 'shield' | 'paw';
