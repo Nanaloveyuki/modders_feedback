@@ -7,12 +7,11 @@ import { IconButton, Panel, Scrim } from './ui';
 type Props = {
   title: string;
   subtitle: string;
-  wide?: boolean;
   onClose: () => void;
   children: ReactNode;
 };
 
-export function Modal({ title, subtitle, wide = false, onClose, children }: Props) {
+export function Modal({ title, subtitle, onClose, children }: Props) {
   const { t } = useI18n();
   const { palette } = useTheme();
   useEffect(() => {
@@ -25,8 +24,8 @@ export function Modal({ title, subtitle, wide = false, onClose, children }: Prop
 
   return (
     <Scrim onClose={onClose}>
-      <Panel className={wide ? 'admin-modal' : undefined} labelledBy="modal-title">
-        <div className="modal-heading" style={{ borderColor: palette.line }}>
+      <Panel labelledBy="modal-title">
+        <div className="modal-heading">
           <div>
             <div className="modal-kicker" style={{ color: palette.gold }}>{t('modalKicker')}</div>
             <h2 id="modal-title" style={{ color: palette.text }}>{title}</h2>

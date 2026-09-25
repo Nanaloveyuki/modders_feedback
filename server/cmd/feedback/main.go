@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"modders-feedback/server/internal/api"
 	"modders-feedback/server/internal/auth"
@@ -37,10 +42,30 @@ func run() error {
 	if err := db.SeedAdmin(cfg.AdminUsername, cfg.AdminPassword); err != nil {
 		return err
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	db.StartBackups(ctx)
 
-	handler := api.New(db, auth.New(cfg.JWTSecret, cfg.CookieSecure), cfg.WebDir)
+	server := &http.Server{
+		Addr:    cfg.ListenAddr,
+		Handler: api.New(db, auth.New(cfg.JWTSecret, cfg.CookieSecure), cfg.WebDir).Routes(),
+	}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
 	log.Printf("feedback server listening on %s", cfg.ListenAddr)
-	return http.ListenAndServe(cfg.ListenAddr, handler.Routes())
+	select {
+	case err := <-errCh:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return server.Shutdown(shutdownCtx)
+	}
 }
 func healthcheck() {
 	response, err := http.Get("http://127.0.0.1" + listenHost() + "/api/health")

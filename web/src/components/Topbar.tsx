@@ -1,6 +1,7 @@
-import { ExternalLink, Github, LockKeyhole, LogOut, Moon, Settings, Sun } from 'lucide-react';
+import { ExternalLink, Github, LockKeyhole, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react';
 import { nextLocale, useI18n } from '../i18n/context';
 import { siteIcons } from '../lib/icons';
+import { navigate } from '../router';
 import { useTheme } from '../theme/context';
 import type { SiteIcon, User } from '../types';
 import { IconButton } from './ui';
@@ -19,9 +20,9 @@ export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) 
   const { dark, palette, toggle } = useTheme();
   const themeLabel = dark ? t('themeToLight') : t('themeToDark');
   return (
-    <header className="topbar" style={{ background: palette.bar, borderColor: palette.line, color: palette.muted }}>
-      <a className="brand" href="#top" aria-label={t('brandHome')}>
-        <span className="brand-mark" style={{ color: palette.gold, borderColor: palette.lineStrong, background: palette.raised }}>
+    <header className="topbar" style={{ background: palette.surface, color: palette.muted }}>
+      <a className="brand" href="/" aria-label={t('brandHome')}>
+        <span className="brand-mark" style={{ color: palette.accentInk, background: palette.accent }}>
           {siteIcons[icon].icon}
         </span>
         <span className="brand-name" style={{ color: palette.text }}>
@@ -42,7 +43,7 @@ export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) 
         <button
           className="lang-toggle"
           aria-label={t('language')}
-          style={{ color: palette.text, borderColor: palette.line, background: 'transparent' }}
+          style={{ color: palette.text, background: palette.hover }}
           onClick={() => setLocale(nextLocale(locale))}
         >
           {locale === 'zh' ? 'EN' : '中文'}
@@ -53,12 +54,15 @@ export function Topbar({ user, icon, name, onLogin, onLogout, onAdmin }: Props) 
         {user ? (
           <>
             {user.role === 'admin' && <IconButton label={t('adminOpen')} tone="gold" onClick={onAdmin}><Settings size={17} /></IconButton>}
-            <span className="user-avatar" style={{ color: palette.goldInk, background: palette.raised }}>{user.username.slice(0, 1).toUpperCase()}</span>
+            <span className="user-avatar" style={{ color: palette.goldInk, background: palette.accent }}>
+              {user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : user.username.slice(0, 1).toUpperCase()}
+            </span>
             <span className="account-name">{user.username}</span>
+            <IconButton label={t('accountOpen')} onClick={() => navigate('/account')}><UserRound size={16} /></IconButton>
             <IconButton label={t('logout')} onClick={onLogout}><LogOut size={16} /></IconButton>
           </>
         ) : (
-          <button className="login-button" style={{ color: palette.text, borderColor: palette.line, background: 'transparent' }} onClick={onLogin}>
+          <button className="login-button" style={{ color: palette.text, background: palette.hover }} onClick={onLogin}>
             <LockKeyhole size={14} /> {t('login')}
           </button>
         )}

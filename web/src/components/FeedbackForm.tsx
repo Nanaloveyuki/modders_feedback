@@ -30,7 +30,7 @@ export function FeedbackForm({ onSubmit }: Props) {
   const [category, setCategory] = useState<Category>('bug');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const control = { color: palette.text, background: palette.field, borderColor: palette.line };
+  const control = { color: palette.text, background: palette.field };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -70,7 +70,7 @@ export function FeedbackForm({ onSubmit }: Props) {
               style={{
                 color: picked ? palette.activeInk : palette.muted,
                 background: picked ? palette.active : palette.field,
-                borderColor: picked ? categoryColor(palette, key) : palette.line,
+                borderColor: 'transparent',
               }}
             >
               <span style={{ color: categoryColor(palette, key) }}>{categoryIcons[key]}</span>{t(key)}

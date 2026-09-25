@@ -1,5 +1,5 @@
 import type { Locale } from '../i18n/messages';
-import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, SiteSettings, Status, User } from '../types';
+import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, ProfileUpdate, SiteSettings, Status, User } from '../types';
 import { api } from './client';
 
 export async function listFeedback(mod: string, category: Category | 'all', locale: Locale) {
@@ -17,6 +17,18 @@ export async function listFeedback(mod: string, category: Category | 'all', loca
 
 export function currentUser(locale: Locale) {
   return api<User>('/auth/me', locale);
+}
+
+export function updateProfile(data: ProfileUpdate, locale: Locale) {
+  return api<User>('/account', locale, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function updatePassword(currentPassword: string, newPassword: string, locale: Locale) {
+  return api<void>('/account/password', locale, { method: 'PATCH', body: JSON.stringify({ currentPassword, newPassword }) });
+}
+
+export function updateAvatar(image: string, crop: { x: number; y: number; size: number }, locale: Locale) {
+  return api<User>('/account/avatar', locale, { method: 'PUT', body: JSON.stringify({ image, ...crop }) });
 }
 
 export function login(username: string, password: string, locale: Locale) {

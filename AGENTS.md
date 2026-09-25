@@ -119,7 +119,7 @@ docker compose logs --tail=100 feedback
 docker compose down
 ```
 
-The persistent database is in the `feedback-data` named volume at `/data/feedback.db`. Back it up before upgrades or destructive operations. `docker compose down -v` removes the volume and must be treated as data deletion.
+The persistent database is in the `feedback-data` named volume at `/data/feedback.db`. The service writes an online backup into `/data/backups` at startup and every 72 hours, keeps the 10 newest copies, and deletes the oldest when publishing a newer one or when the disk is full. Back up the volume before upgrades or destructive operations. `docker compose down -v` removes the volume and must be treated as data deletion.
 
 For HTTPS deployments, terminate TLS at a trusted reverse proxy and set `COOKIE_SECURE=true`. Do not expose the service directly to the public Internet without HTTPS and a network-level access policy.
 

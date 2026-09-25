@@ -27,7 +27,7 @@ export function IconButton({ label, tone = 'neutral', className, style, children
       className={className ? `icon-button ${className}` : 'icon-button'}
       aria-label={label}
       title={props.title ?? label}
-      style={{ color, borderColor: palette.line, background: 'transparent', ...style }}
+      style={{ color, background: palette.surface, ...style }}
     >
       {children}
     </button>
@@ -44,7 +44,7 @@ export function ActionButton({ className, style, children, ...props }: ActionBut
     <button
       {...props}
       className={className ? `${className} action-button` : 'create-button action-button'}
-      style={{ background: palette.accent, color: palette.accentInk, ...style }}
+      style={{ ...style }}
     >
       {children}
     </button>
@@ -65,7 +65,6 @@ export function TextButton({ active = false, style, children, ...props }: TextBu
       style={{
         color: active ? palette.activeInk : palette.muted,
         background: active ? palette.active : 'transparent',
-        borderColor: palette.line,
         ...style,
       }}
     >
@@ -77,7 +76,7 @@ export function TextButton({ active = false, style, children, ...props }: TextBu
 export function Avatar({ name }: { name: string }) {
   const { palette } = useTheme();
   return (
-    <span className="author-avatar" style={{ color: palette.goldInk, background: palette.raised }}>
+    <span className="author-avatar" style={{ color: palette.goldInk, background: palette.accent }}>
       {name.slice(0, 1).toUpperCase()}
     </span>
   );
@@ -102,8 +101,7 @@ export function Panel({
       style={{
         background: palette.surface,
         color: palette.text,
-        borderColor: palette.lineStrong,
-        boxShadow: `0 20px 75px ${palette.shadow}`,
+        boxShadow: `0 18px 48px ${palette.shadow}`,
       }}
     >
       {children}
@@ -152,9 +150,8 @@ export function Notice({ kind, children, closeLabel, onClose, closeIcon }: Notic
       role={error ? 'alert' : 'status'}
       style={{
         color: error ? palette.danger : palette.text,
-        background: error ? palette.raised : palette.surface,
-        borderColor: error ? palette.danger : palette.lineStrong,
-        boxShadow: `0 6px 25px ${palette.shadow}`,
+        background: palette.surface,
+        boxShadow: `0 16px 40px ${palette.shadow}`,
       }}
     >
       {children}

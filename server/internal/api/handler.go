@@ -1,8 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"image"
+	"image/draw"
+	"image/png"
 	"io/fs"
 	"net/http"
 	"os"
@@ -11,6 +17,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	_ "golang.org/x/image/webp"
+	_ "image/gif"
+	_ "image/jpeg"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -41,6 +51,10 @@ func (h *Handler) Routes() *chi.Mux {
 	r.Post("/api/auth/register", h.register)
 	r.Post("/api/auth/logout", h.logout)
 	r.Get("/api/auth/me", h.me)
+	r.Patch("/api/account", h.updateAccount)
+	r.Patch("/api/account/password", h.updatePassword)
+	r.Put("/api/account/avatar", h.updateAvatar)
+	r.Get("/api/account/avatar", h.avatar)
 	r.Get("/api/mods", h.listMods)
 	r.Post("/api/mods", h.createMod)
 	r.Patch("/api/mods/{id}", h.updateMod)
@@ -115,22 +129,176 @@ func (h *Handler) logout(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
-	username, ok := h.sessions.Username(r)
+	user, ok := h.accountUser(w, r)
 	if !ok {
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
-		return
-	}
-	user, found, err := h.store.User(username)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取账号失败", "Could not load the account"))
-		return
-	}
-	if !found {
-		h.sessions.Clear(w)
-		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
 		return
 	}
 	httpx.JSON(w, http.StatusOK, user)
+}
+
+func (h *Handler) updateAccount(w http.ResponseWriter, r *http.Request) {
+	current, ok := h.accountUser(w, r)
+	if !ok {
+		return
+	}
+	var input domain.ProfileUpdate
+	if !httpx.Decode(w, r, &input) {
+		return
+	}
+	input.Username = strings.TrimSpace(input.Username)
+	input.Email = strings.TrimSpace(input.Email)
+	input.QQ = strings.TrimSpace(input.QQ)
+	if !validUsername(input.Username) || !validOptionalEmail(input.Email) || !validOptionalQQ(input.QQ) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "用户名为 3-32 位字母、数字、下划线或连字符。邮箱和 QQ 号可选。", "Username must be 3-32 letters, digits, underscores, or hyphens. Email and QQ are optional."))
+		return
+	}
+	saved, err := h.store.UpdateProfile(current.Username, input)
+	if errors.Is(err, domain.ErrUsernameTaken) {
+		httpx.Error(w, http.StatusConflict, httpx.Text(r, "用户名已被使用", "Username is already in use"))
+		return
+	}
+	if errors.Is(err, domain.ErrEmailTaken) {
+		httpx.Error(w, http.StatusConflict, httpx.Text(r, "邮箱已被使用", "Email is already in use"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "保存资料失败", "Could not save the profile"))
+		return
+	}
+	if saved.Username != current.Username {
+		if err := h.sessions.Issue(w, saved.Username); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "保存资料失败", "Could not save the profile"))
+			return
+		}
+	}
+	httpx.JSON(w, http.StatusOK, saved)
+}
+
+func (h *Handler) updatePassword(w http.ResponseWriter, r *http.Request) {
+	current, ok := h.accountUser(w, r)
+	if !ok {
+		return
+	}
+	var input domain.PasswordUpdate
+	if !httpx.Decode(w, r, &input) {
+		return
+	}
+	if !validPassword(input.NewPassword) || input.CurrentPassword == "" || utf8.RuneCountInString(input.CurrentPassword) > 128 {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "新密码至少 12 位，且需要填写现密码。", "The new password must be at least 12 characters, and the current password is required."))
+		return
+	}
+	err := h.store.UpdatePassword(current.Username, input.CurrentPassword, input.NewPassword)
+	if errors.Is(err, domain.ErrBadPassword) {
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "现密码不正确", "Current password is incorrect"))
+		return
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "修改密码失败", "Could not change the password"))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) updateAvatar(w http.ResponseWriter, r *http.Request) {
+	current, ok := h.accountUser(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Image string `json:"image"`
+		X     int    `json:"x"`
+		Y     int    `json:"y"`
+		Size  int    `json:"size"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil || input.Image == "" {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "头像内容无效", "Invalid avatar"))
+		return
+	}
+	raw, err := base64.StdEncoding.DecodeString(input.Image)
+	if err != nil || len(raw) == 0 || len(raw) > 12<<20 {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "头像必须是不超过 12MiB 的 PNG、JPEG、GIF 或 WebP。", "The avatar must be a PNG, JPEG, GIF, or WebP no larger than 12MiB."))
+		return
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "头像必须是 PNG、JPEG、GIF 或 WebP。", "The avatar must be a PNG, JPEG, GIF, or WebP."))
+		return
+	}
+	bounds := decoded.Bounds()
+	if bounds.Dx() < 1 || bounds.Dy() < 1 || bounds.Dx() > 4096 || bounds.Dy() > 4096 || input.Size < 1 || input.X < bounds.Min.X || input.Y < bounds.Min.Y || input.X+input.Size > bounds.Max.X || input.Y+input.Size > bounds.Max.Y {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "裁剪区域超出图片，或边长超过 4096。", "The crop is outside the image, or a side is longer than 4096 pixels."))
+		return
+	}
+	cropped := scaleSquare(decoded, input.X, input.Y, input.Size)
+	var encoded bytes.Buffer
+	if err = png.Encode(&encoded, cropped); err != nil || encoded.Len() > 2<<20 {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "转换后的 PNG 超过 2MiB。", "The converted PNG is larger than 2MiB."))
+		return
+	}
+	if err = h.store.SetAvatar(current.Username, encoded.Bytes()); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "保存头像失败", "Could not save the avatar"))
+		return
+	}
+	current.AvatarURL = "/api/account/avatar?u=" + current.Username
+	httpx.JSON(w, http.StatusOK, current)
+}
+
+func scaleSquare(source image.Image, x, y, size int) *image.NRGBA {
+	out := image.NewNRGBA(image.Rect(0, 0, 256, 256))
+	if size == 256 {
+		draw.Draw(out, out.Bounds(), source, image.Point{x, y}, draw.Src)
+		return out
+	}
+	for py := range 256 {
+		sy := y + py*size/256
+		for px := range 256 {
+			out.Set(px, py, source.At(x+px*size/256, sy))
+		}
+	}
+	return out
+}
+
+func (h *Handler) avatar(w http.ResponseWriter, r *http.Request) {
+	username := strings.TrimSpace(r.URL.Query().Get("u"))
+	if !validUsername(username) {
+		http.NotFound(w, r)
+		return
+	}
+	pngBytes, found, err := h.store.Avatar(username)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取头像失败", "Could not load the avatar"))
+		return
+	}
+	if !found {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(pngBytes)
+}
+
+func (h *Handler) accountUser(w http.ResponseWriter, r *http.Request) (domain.User, bool) {
+	username, ok := h.sessions.Username(r)
+	if !ok {
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+		return domain.User{}, false
+	}
+	user, found, err := h.store.User(username)
+	if err != nil || !found {
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取账号失败", "Could not load the account"))
+			return domain.User{}, false
+		}
+		h.sessions.Clear(w)
+		httpx.Error(w, http.StatusUnauthorized, httpx.Text(r, "请先登录", "Log in first"))
+		return domain.User{}, false
+	}
+	return user, true
 }
 
 func (h *Handler) listFeedback(w http.ResponseWriter, r *http.Request) {

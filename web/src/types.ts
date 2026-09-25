@@ -17,7 +17,19 @@ export type Feedback = {
   createdAt: string;
 };
 
-export type User = { username: string; role: 'admin' | 'member' };
+export type User = {
+  username: string;
+  role: 'admin' | 'member';
+  email: string;
+  qq: string;
+  avatarUrl: string;
+};
+
+export type ProfileUpdate = {
+  username: string;
+  email: string;
+  qq: string;
+};
 
 export type FeedbackDraft = {
   category: Category;

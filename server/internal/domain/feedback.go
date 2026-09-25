@@ -8,6 +8,8 @@ import (
 var (
 	ErrLastMod       = errors.New("cannot delete the last mod")
 	ErrUsernameTaken = errors.New("username already exists")
+	ErrEmailTaken    = errors.New("email already exists")
+	ErrBadPassword   = errors.New("current password is incorrect")
 )
 
 const (
@@ -53,8 +55,22 @@ type Registration struct {
 }
 
 type User struct {
+	Username  string `json:"username"`
+	Role      string `json:"role"`
+	Email     string `json:"email"`
+	QQ        string `json:"qq"`
+	AvatarURL string `json:"avatarUrl"`
+}
+
+type ProfileUpdate struct {
 	Username string `json:"username"`
-	Role     string `json:"role"`
+	Email    string `json:"email"`
+	QQ       string `json:"qq"`
+}
+
+type PasswordUpdate struct {
+	CurrentPassword string `json:"currentPassword"`
+	NewPassword     string `json:"newPassword"`
 }
 
 type StatusUpdate struct {

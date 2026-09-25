@@ -15,7 +15,7 @@ export function LoginForm({ mode, onSubmit, onSwitch }: Props) {
   const { palette } = useTheme();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const control = { color: palette.text, background: palette.field, borderColor: palette.line };
+  const control = { color: palette.text, background: palette.field };
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

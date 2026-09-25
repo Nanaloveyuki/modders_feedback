@@ -13,7 +13,8 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db      *sql.DB
+	dataDir string
 }
 
 func Open(dataDir string) (*Store, error) {
@@ -25,7 +26,7 @@ func Open(dataDir string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
-	store := &Store{db: db}
+	store := &Store{db: db, dataDir: dataDir}
 	if err := store.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -217,9 +218,10 @@ func (s *Store) ensureCategoryNumber() error {
 
 func (s *Store) ensureUsers() error {
 	columns := map[string]string{
-		"role":  "TEXT NOT NULL DEFAULT 'member'",
-		"email": "TEXT NOT NULL DEFAULT ''",
-		"qq":    "TEXT NOT NULL DEFAULT ''",
+		"role":   "TEXT NOT NULL DEFAULT 'member'",
+		"email":  "TEXT NOT NULL DEFAULT ''",
+		"qq":     "TEXT NOT NULL DEFAULT ''",
+		"avatar": "BLOB",
 	}
 	for name, definition := range columns {
 		var present int
@@ -303,10 +305,70 @@ func (s *Store) Register(input domain.Registration) (domain.User, error) {
 	return domain.User{Username: input.Username, Role: "member"}, nil
 }
 
+func (s *Store) UpdateProfile(currentUsername string, input domain.ProfileUpdate) (domain.User, error) {
+	result, err := s.db.Exec(
+		`UPDATE users SET username = ?, email = ?, qq = ? WHERE username = ? AND NOT EXISTS (SELECT 1 FROM users AS other WHERE other.username = ? AND other.username != ?)`,
+		input.Username, input.Email, input.QQ, currentUsername, input.Username, currentUsername,
+	)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return domain.User{}, domain.ErrEmailTaken
+		}
+		return domain.User{}, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return domain.User{}, err
+	}
+	if changed == 0 {
+		return domain.User{}, domain.ErrUsernameTaken
+	}
+	if currentUsername != input.Username {
+		if _, err := s.db.Exec(`UPDATE feedback SET author = ? WHERE author = ?`, input.Username, currentUsername); err != nil {
+			return domain.User{}, err
+		}
+	}
+	user, _, err := s.userByUsername(input.Username)
+	return user, err
+}
+
+func (s *Store) UpdatePassword(username, currentPassword, nextPassword string) error {
+	_, hash, err := s.userByUsername(username)
+	if err != nil {
+		return err
+	}
+	if bcrypt.CompareHashAndPassword(hash, []byte(currentPassword)) != nil {
+		return domain.ErrBadPassword
+	}
+	next, err := bcrypt.GenerateFromPassword([]byte(nextPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE users SET password_hash = ? WHERE username = ?`, next, username)
+	return err
+}
+
+func (s *Store) SetAvatar(username string, png []byte) error {
+	_, err := s.db.Exec(`UPDATE users SET avatar = ? WHERE username = ?`, png, username)
+	return err
+}
+
+func (s *Store) Avatar(username string) ([]byte, bool, error) {
+	var png []byte
+	err := s.db.QueryRow(`SELECT avatar FROM users WHERE username = ?`, username).Scan(&png)
+	if errors.Is(err, sql.ErrNoRows) || len(png) == 0 {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return png, true, nil
+}
+
 func (s *Store) userByUsername(username string) (domain.User, []byte, error) {
 	var user domain.User
 	var hash []byte
-	err := s.db.QueryRow(`SELECT username, role, password_hash FROM users WHERE username = ?`, username).Scan(&user.Username, &user.Role, &hash)
+	err := s.db.QueryRow(`SELECT username, role, email, qq, CASE WHEN avatar IS NULL OR length(avatar) = 0 THEN '' ELSE '/api/account/avatar?u=' || username END, password_hash FROM users WHERE username = ?`, username).Scan(&user.Username, &user.Role, &user.Email, &user.QQ, &user.AvatarURL, &hash)
 	if user.Role != "admin" {
 		user.Role = "member"
 	}

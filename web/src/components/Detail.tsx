@@ -23,7 +23,7 @@ export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: 
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const control = { color: palette.text, background: palette.field, borderColor: palette.line };
+  const control = { color: palette.text, background: palette.field };
   const choices = canManage ? statusKeys : authorStatusKeys;
   const categoryColor = item.category === 'bug' ? palette.bug : item.category === 'feature' ? palette.feature : palette.question;
   useEffect(() => {
@@ -73,7 +73,7 @@ export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: 
           <span>{labels.dateTime(item.createdAt)}</span>
         </div>
         <div className="detail-body" style={{ color: palette.text }}>{item.body}</div>
-        <div className="detail-facts" style={{ borderColor: palette.line }}>
+        <div className="detail-facts">
           <div><span style={{ color: palette.faint }}>RIMWORLD</span><strong style={{ color: palette.muted }}>{item.gameVersion || t('missing')}</strong></div>
           <div><span style={{ color: palette.faint }}>MOD VERSION</span><strong style={{ color: palette.muted }}>{item.modVersion || t('missing')}</strong></div>
           <div><span style={{ color: palette.faint }}>STATUS</span><strong className={`status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</strong></div>
@@ -81,14 +81,14 @@ export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: 
         {item.modList && (
           <div className="detail-extra">
             <h3 style={{ color: palette.faint }}>{t('extraMods')}</h3>
-            <pre style={{ color: palette.text, background: palette.field }}>{item.modList}</pre>
+            <pre style={{ color: palette.text, background: palette.surface }}>{item.modList}</pre>
           </div>
         )}
         {item.saveLink && <a className="save-link" href={item.saveLink} target="_blank" rel="noreferrer" style={{ color: palette.gold }}><ExternalLink size={14} />{t('openSave')}</a>}
         {(canManage || canEdit) && (
           <label className="status-editor" style={{ color: palette.muted }}>
             {t('updateStatus')}
-            <select value={item.status} disabled={!canManage && !choices.includes(item.status)} onChange={(event) => void onStatus(item, event.target.value as Status)} style={{ color: palette.text, background: palette.field, borderColor: palette.line }}>
+            <select value={item.status} disabled={!canManage && !choices.includes(item.status)} onChange={(event) => void onStatus(item, event.target.value as Status)} style={{ color: palette.text, background: palette.field }}>
               {!choices.includes(item.status) && <option value={item.status}>{labels.status(item.status)}</option>}
               {choices.map((key) => <option key={key} value={key}>{labels.status(key)}</option>)}
             </select>
@@ -110,7 +110,7 @@ export function Detail({ item, canManage, canEdit, onClose, onStatus, onSave }: 
             <ActionButton className="form-submit" disabled={pending}>{pending ? t('savingRecord') : t('saveOwn')}</ActionButton>
           </form>
         )}
-        <div className="detail-bottom" style={{ borderColor: palette.line, color: palette.faint }}>
+        <div className="detail-bottom" style={{ color: palette.faint }}>
           <span>ISSUE / {String(item.id).padStart(4, '0')}</span>
           <button onClick={() => { void navigator.clipboard?.writeText(window.location.href); }} style={{ color: palette.gold }}>
             <Clipboard size={14} />{t('copyAddress')}

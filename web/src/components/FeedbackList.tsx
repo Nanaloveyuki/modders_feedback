@@ -37,7 +37,7 @@ export function statusColors(palette: Palette, status: Status) {
       : status === 'resolved' ? palette.resolved
         : status === 'withdrawn' ? palette.danger
           : palette.closed;
-  return { color, borderColor: color, background: palette.raised };
+  return { color, background: palette.accent };
 }
 
 export function FeedbackList({
@@ -51,7 +51,7 @@ export function FeedbackList({
   const narrowed = Boolean(query) || status !== 'all';
   const start = shown.length ? (page - 1) * pageSize + 1 : 0;
   const end = Math.min(page * pageSize, filteredCount);
-  const field = { color: palette.text, borderColor: palette.line, background: palette.field };
+  const field = { color: palette.text };
 
   return (
     <section className="feed" aria-label={t('feedLabel')}>
@@ -59,7 +59,7 @@ export function FeedbackList({
         <h2 style={{ color: palette.text }}>{heading}</h2>
         <ActionButton onClick={onCreate}><Plus size={17} />{t('create')}</ActionButton>
       </div>
-      <div className="toolbar" style={{ borderColor: palette.line }}>
+      <div className="toolbar">
         <label className="search-field" style={field}>
           <Search size={16} />
           <input aria-label={t('search')} placeholder={t('searchPlaceholder')} value={query} onChange={(event) => onQuery(event.target.value)} style={{ color: palette.text }} />
@@ -73,16 +73,16 @@ export function FeedbackList({
           </select>
           <ChevronDown size={13} />
         </label>
-        <button className="sort-button" onClick={onSort} style={{ color: palette.muted }}>
+        <button className="sort-button" onClick={onSort}>
           <ArrowDownUp size={14} />{sort === 'new' ? t('newest') : t('oldest')}
         </button>
       </div>
-      <div className="list-header" style={{ color: palette.faint, borderColor: palette.line }}>
+      <div className="list-header" style={{ color: palette.faint }}>
         <span>{t('colIssue')}</span><span>{t('colStatus')}</span><span>{t('colAuthor')}</span><span>{t('colTime')}</span>
       </div>
       <div className="feedback-list">
         {loading ? <div className="empty-state" style={{ color: palette.muted }}><span className="loading-dash" style={{ background: palette.gold }} />{t('loading')}</div> : shown.length ? shown.map((item, index) => (
-          <article key={item.id} className="feedback-row" style={{ animationDelay: `${index * 36}ms`, borderColor: palette.line }}>
+          <article key={item.id} className="feedback-row" style={{ animationDelay: `${index * 36}ms`, background: palette.surface }}>
             <button className="row-main" onClick={() => onOpen(item)}>
               <span className={`row-category cat-${item.category}`} style={{ color: categoryColor(palette, item.category) }}>
                 {categoryIcons[item.category]}
@@ -102,13 +102,13 @@ export function FeedbackList({
           </article>
         )) : (
           <div className="empty-state" style={{ color: palette.muted }}>
-            <div className="empty-glyph" style={{ color: palette.gold, borderColor: palette.line, background: palette.raised }}>
+            <div className="empty-glyph" style={{ color: palette.accentInk, background: palette.accent }}>
               {narrowed ? <Search size={21} /> : <MessageSquareText size={21} />}
             </div>
             <strong style={{ color: palette.text }}>{narrowed ? t('noMatch') : t('quiet')}</strong>
             <span style={{ color: palette.faint }}>{narrowed ? t('noMatchHint') : t('quietHint')}</span>
             {!narrowed && (
-              <button onClick={onCreate} style={{ color: palette.goldInk, borderColor: palette.lineStrong, background: palette.raised }}>
+              <button onClick={onCreate} style={{ color: palette.goldInk, background: palette.accent }}>
                 <Plus size={15} />{t('firstItem')}
               </button>
             )}
@@ -118,11 +118,11 @@ export function FeedbackList({
       <footer className="feed-footer" style={{ color: palette.faint }}>
         <span>{t('range', { start, end, total: filteredCount })}</span>
         <div className="pagination" style={{ color: palette.muted }}>
-          <button aria-label={t('prevPage')} disabled={page === 1} onClick={() => onPage(page - 1)} style={{ color: palette.text, borderColor: palette.line }}>
+          <button aria-label={t('prevPage')} disabled={page === 1} onClick={() => onPage(page - 1)} style={{ color: palette.text, background: palette.surface }}>
             <ArrowLeft size={15} />
           </button>
           <span>{page.toString().padStart(2, '0')} <i>/</i> {totalPages.toString().padStart(2, '0')}</span>
-          <button aria-label={t('nextPage')} disabled={page >= totalPages} onClick={() => onPage(page + 1)} style={{ color: palette.text, borderColor: palette.line }}>
+          <button aria-label={t('nextPage')} disabled={page >= totalPages} onClick={() => onPage(page + 1)} style={{ color: palette.text, background: palette.surface }}>
             <ArrowRight size={15} />
           </button>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, ShieldCheck, ExternalLink, X } from 'lucide-react';
+import { AlertTriangle, Check, X } from 'lucide-react';
 import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, listFeedback, listMods, login, logout, register, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus } from './api/feedback';
+import { AccountPage } from './components/AccountPage';
 import { AdminPanel } from './components/AdminPanel';
 import { Detail } from './components/Detail';
 import { FeedbackForm } from './components/FeedbackForm';
@@ -12,22 +13,24 @@ import { Topbar } from './components/Topbar';
 import { Notice } from './components/ui';
 import { useI18n } from './i18n/context';
 import { defaultSettings } from './lib/icons';
+import { adminPath, currentRoute, navigate, type Route } from './router';
 import { useTheme } from './theme/context';
 import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, SiteSettings, Status, User } from './types';
 
 const pageSize = 7;
-const feedbackRepo = 'https://github.com/Nanaloveyuki/modders_feedback';
+
 const defaultModSlug = 'rhah';
 
 export function App() {
   const { locale, t } = useI18n();
   const [items, setItems] = useState<Feedback[]>([]);
+  const [adminItems, setAdminItems] = useState<Feedback[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [filter, setFilter] = useState<Category | 'all'>('all');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [sort, setSort] = useState<'new' | 'old'>('new');
-  const [modal, setModal] = useState<'login' | 'register' | 'create' | 'admin' | null>(null);
+  const [modal, setModal] = useState<'login' | 'register' | 'create' | null>(null);
   const [selected, setSelected] = useState<Feedback | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -37,6 +40,7 @@ export function App() {
   const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
   const [mods, setMods] = useState<Mod[]>([]);
   const [modSlug, setModSlug] = useState(defaultModSlug);
+  const [route, setRoute] = useState<Route>(() => currentRoute());
 
   async function refresh(slug = modSlug) {
     setLoading(true);
@@ -44,14 +48,16 @@ export function App() {
       const catalog = await listMods(locale).catch(() => [] as Mod[]);
       const active = catalog.find((item) => item.slug === slug) ?? catalog[0];
       const nextSlug = active?.slug ?? slug;
-      const [list, current, site] = await Promise.all([
+      const [list, managed, current, site] = await Promise.all([
         listFeedback(nextSlug, filter, locale),
+        listFeedback(nextSlug, 'all', locale),
         currentUser(locale).catch(() => null),
         siteSettings(locale).catch(() => defaultSettings),
       ]);
       setMods(catalog);
       setModSlug(nextSlug);
       setItems(list);
+      setAdminItems(managed);
       setUser(current);
       setSettings(site);
     } catch (problem) {
@@ -62,7 +68,11 @@ export function App() {
   }
 
   useEffect(() => { void refresh(); }, [filter, locale]);
-
+  useEffect(() => {
+    const sync = () => setRoute(currentRoute());
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
   useEffect(() => { setPage(1); }, [filter, query, status]);
 
   const filtered = items.filter((item) => {
@@ -104,6 +114,7 @@ export function App() {
   async function submitFeedback(data: FeedbackDraft) {
     const created = await createFeedback(modSlug, data, locale);
     setItems((previous) => [created, ...previous]);
+    setAdminItems((previous) => [created, ...previous]);
     setFilter(data.category);
     setStatus('all');
     setModal(null);
@@ -124,7 +135,6 @@ export function App() {
     const created = await createMod(input, locale);
     setMods((previous) => [...previous, created]);
     setNotice(t('modAdded'));
-    selectMod(created.slug);
   }
 
   async function saveMod(item: Mod, input: ModInput) {
@@ -155,6 +165,7 @@ export function App() {
   async function saveRecord(item: Feedback, update: FeedbackUpdate) {
     const saved = await updateFeedback(item.id, update, locale);
     setItems((previous) => previous.map((entry) => entry.id === item.id ? saved : entry));
+    setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? saved : entry));
     setSelected((previous) => previous?.id === item.id ? saved : previous);
     setNotice(t('recordSaved'));
   }
@@ -162,6 +173,7 @@ export function App() {
   async function removeRecord(item: Feedback) {
     await deleteFeedback(item.id, locale);
     setItems((previous) => previous.filter((entry) => entry.id !== item.id));
+    setAdminItems((previous) => previous.filter((entry) => entry.id !== item.id));
     setSelected((previous) => previous?.id === item.id ? null : previous);
     setNotice(t('recordDeleted'));
   }
@@ -170,6 +182,7 @@ export function App() {
     try {
       await updateStatus(item.id, next, locale);
       setItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
+      setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
       setSelected((previous) => previous?.id === item.id ? { ...previous, status: next } : previous);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('statusFailed'));
@@ -178,7 +191,26 @@ export function App() {
 
   return (
     <>
-      <Topbar user={user} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { if (user?.role === 'admin') { setError(''); setModal('admin'); } }} />
+      <Topbar user={user} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { if (user?.role === 'admin') navigate(adminPath('settings')); }} />
+      {route.name === 'admin' ? (
+        user?.role === 'admin' ? (
+          <AdminPanel page={route.page} items={adminItems} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} />
+        ) : (
+          <main className="admin-denied">
+            <h1 style={{ color: palette.text }}>{t('adminDenied')}</h1>
+            <p style={{ color: palette.muted }}>{t(user ? 'adminDeniedMember' : 'adminDeniedGuest')}</p>
+            <button type="button" className="create-button" onClick={() => user ? navigate('/') : setModal('login')}>{user ? t('adminBack') : t('login')}</button>
+          </main>
+        )
+      ) : route.name === 'account' ? (
+        user ? <AccountPage user={user} onUser={setUser} /> : (
+          <main className="admin-denied">
+            <h1 style={{ color: palette.text }}>{t('accountTitle')}</h1>
+            <p style={{ color: palette.muted }}>{t('accountGuest')}</p>
+            <button type="button" className="create-button" onClick={() => setModal('login')}>{t('login')}</button>
+          </main>
+        )
+      ) : (
       <main id="top" className="main-layout">
         <Sidebar filter={filter} settings={settings} mods={mods} modSlug={modSlug} count={count} onFilter={setFilter} onMod={selectMod} />
         <FeedbackList
@@ -200,21 +232,17 @@ export function App() {
           onCreate={openComposer}
         />
       </main>
-      <div className="bottom-rail" style={{ background: palette.bar, borderColor: palette.line, color: palette.faint }}>
-        <span><ShieldCheck size={14} style={{ color: palette.gold }} />{t('footerNote')}</span>
-        <a href={feedbackRepo} target="_blank" rel="noreferrer">{t('footerRepo')} <ExternalLink size={12} /></a>
-        <a href="https://steamcommunity.com/" target="_blank" rel="noreferrer">{t('steamCommunity')} <ExternalLink size={12} /></a>
-      </div>
+      )}
+
       {error && <Notice kind="error" closeLabel={t('closeNotice')} onClose={() => setError('')} closeIcon={<X size={15} />}><AlertTriangle size={16} />{error}</Notice>}
       {notice && <Notice kind="ok" closeLabel={t('closeNotice')} onClose={() => setNotice('')} closeIcon={<X size={15} />}><Check size={16} />{notice}</Notice>}
       {modal && (
         <Modal
-          title={modal === 'login' ? t('loginTitle') : modal === 'register' ? t('registerTitle') : modal === 'admin' ? t('admin') : t('create')}
-          subtitle={modal === 'login' ? t('loginSubtitle') : modal === 'register' ? t('registerSubtitle') : modal === 'admin' ? t('adminSubtitle') : t('createSubtitle')}
-          wide={modal === 'admin'}
+          title={modal === 'login' ? t('loginTitle') : modal === 'register' ? t('registerTitle') : t('create')}
+          subtitle={modal === 'login' ? t('loginSubtitle') : modal === 'register' ? t('registerSubtitle') : t('createSubtitle')}
           onClose={() => setModal(null)}
         >
-          {modal === 'login' || modal === 'register' ? <LoginForm mode={modal} onSubmit={modal === 'register' ? submitRegister : async (username, password) => submitLogin(username, password)} onSwitch={() => setModal(modal === 'register' ? 'login' : 'register')} /> : modal === 'admin' ? <AdminPanel items={items} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} /> : <FeedbackForm onSubmit={submitFeedback} />}
+          {modal === 'login' || modal === 'register' ? <LoginForm mode={modal} onSubmit={modal === 'register' ? submitRegister : async (username, password) => submitLogin(username, password)} onSwitch={() => setModal(modal === 'register' ? 'login' : 'register')} /> : <FeedbackForm onSubmit={submitFeedback} />}
         </Modal>
       )}
       {selected && <Detail item={selected} canManage={user?.role === 'admin'} canEdit={Boolean(user && selected.author === user.username)} onClose={() => setSelected(null)} onStatus={changeStatus} onSave={saveRecord} />}
