@@ -150,7 +150,7 @@ func (f *Files) objectPath(id string) string {
 func pack(raw []byte, status string) ([]byte, error) {
 	level := zstd.SpeedDefault
 	label := archiveFast
-	if status == domain.StatusResolved {
+	if status == domain.StatusResolved || status == domain.StatusFixedUnreleased {
 		level = zstd.SpeedBestCompression
 		label = archiveMax
 	}

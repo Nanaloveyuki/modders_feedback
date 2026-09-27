@@ -1,5 +1,5 @@
 export type Category = 'bug' | 'feature' | 'question';
-export type Status = 'open' | 'in_progress' | 'resolved' | 'closed' | 'withdrawn';
+export type Status = 'open' | 'in_progress' | 'testing' | 'fixed_unreleased' | 'resolved' | 'closed' | 'withdrawn';
 
 export type Feedback = {
   id: number;
@@ -10,6 +10,7 @@ export type Feedback = {
   title: string;
   body: string;
   author: string;
+  authorAvatar: string;
   gameVersion: string;
   modVersion: string;
   modList: string;

@@ -32,12 +32,14 @@ function categoryColor(palette: Palette, category: Category) {
 }
 
 export function statusColors(palette: Palette, status: Status) {
-  const color = status === 'open' ? palette.open
+  const background = status === 'open' ? palette.open
     : status === 'in_progress' ? palette.progress
-      : status === 'resolved' ? palette.resolved
-        : status === 'withdrawn' ? palette.danger
-          : palette.closed;
-  return { color, background: palette.accent };
+      : status === 'testing' ? palette.testing
+        : status === 'fixed_unreleased' ? palette.fixed
+          : status === 'resolved' ? palette.resolved
+            : status === 'withdrawn' ? palette.danger
+              : palette.closed;
+  return { color: palette.dark ? '#f4efe4' : '#1c1812', background };
 }
 
 export function FeedbackList({
@@ -92,11 +94,11 @@ export function FeedbackList({
               <span className="row-excerpt" style={{ color: palette.muted }}>{excerpt(item.body)}</span>
               <span className="row-meta-mobile" style={{ color: palette.faint }}>
                 <span className={`status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</span>
-                <span>{item.author} · {labels.ago(item.createdAt)}</span>
+                <span className="row-author"><Avatar name={item.author} src={item.authorAvatar} />{item.author} · {labels.ago(item.createdAt)}</span>
               </span>
             </button>
             <span className={`row-status status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</span>
-            <span className="row-author" style={{ color: palette.muted }}><Avatar name={item.author} />{item.author}</span>
+            <span className="row-author" style={{ color: palette.muted }}><Avatar name={item.author} src={item.authorAvatar} />{item.author}</span>
             <span className="row-time" style={{ color: palette.faint }}><Clock3 size={13} />{labels.ago(item.createdAt)}</span>
             <button className="row-arrow" aria-label={t('viewItem', { title: item.title })} onClick={() => onOpen(item)} style={{ color: palette.faint }}><ArrowRight size={16} /></button>
           </article>

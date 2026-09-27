@@ -90,7 +90,7 @@ export function Detail({ item, modSlug, canManage, canEdit, onStatus, onSave }: 
             {categoryIcons[item.category]}<span>{labels.category(item.category)}</span>
           </span>
           <span className="issue-opened">
-            <Avatar name={item.author} />
+            <Avatar name={item.author} src={item.authorAvatar} />
             <strong style={{ color: palette.text }}>{item.author}</strong>
             <span style={{ color: palette.faint }}>{labels.dateTime(item.createdAt)}</span>
           </span>
@@ -99,7 +99,7 @@ export function Detail({ item, modSlug, canManage, canEdit, onStatus, onSave }: 
       <div className="issue-layout">
         <article className="issue-main" style={{ background: palette.surface }}>
           <div className="issue-comment-head" style={{ color: palette.muted }}>
-            <Avatar name={item.author} />
+            <Avatar name={item.author} src={item.authorAvatar} />
             <strong style={{ color: palette.text }}>{item.author}</strong>
             <span style={{ color: palette.faint }}>{labels.dateTime(item.createdAt)}</span>
             {canChange && !editing && (

@@ -25,6 +25,8 @@ export type Palette = {
   question: string;
   open: string;
   progress: string;
+  testing: string;
+  fixed: string;
   resolved: string;
   closed: string;
   danger: string;
@@ -57,6 +59,8 @@ const light: Palette = {
   question: '#3d7ea6',
   open: '#b8892e',
   progress: '#3d7ea6',
+  testing: '#6a6db8',
+  fixed: '#2f8a78',
   resolved: '#3f8f6b',
   closed: '#7d8794',
   danger: '#c45b70',
@@ -87,11 +91,13 @@ const dark: Palette = {
   bug: '#dc8870',
   feature: '#d5ad62',
   question: '#8db6bd',
-  open: '#d5ae76',
-  progress: '#92b9b9',
-  resolved: '#c4b07a',
-  closed: '#92978c',
-  danger: '#dc8870',
+  open: '#3d2a12',
+  progress: '#102e38',
+  testing: '#241e4a',
+  fixed: '#0e332c',
+  resolved: '#123226',
+  closed: '#2a2e2a',
+  danger: '#3d1c18',
   scrim: 'rgba(6, 8, 6, .77)',
   shadow: 'rgba(0, 0, 0, .32)',
 };

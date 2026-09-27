@@ -21,11 +21,13 @@ const (
 	CategoryFeature  = "feature"
 	CategoryQuestion = "question"
 
-	StatusOpen       = "open"
-	StatusInProgress = "in_progress"
-	StatusResolved   = "resolved"
-	StatusClosed     = "closed"
-	StatusWithdrawn  = "withdrawn"
+	StatusOpen            = "open"
+	StatusInProgress      = "in_progress"
+	StatusTesting         = "testing"
+	StatusFixedUnreleased = "fixed_unreleased"
+	StatusResolved        = "resolved"
+	StatusClosed          = "closed"
+	StatusWithdrawn       = "withdrawn"
 
 	DefaultModSlug   = "rhah"
 	DefaultSteamURL  = "https://steamcommunity.com/sharedfiles/filedetails/?id="
@@ -36,11 +38,14 @@ type Feedback struct {
 	ID             int64        `json:"id"`
 	PublicID       string       `json:"publicId"`
 	ModID          int64        `json:"modId"`
+	ModSlug        string       `json:"modSlug,omitempty"`
+	ModName        string       `json:"modName,omitempty"`
 	Category       string       `json:"category"`
 	CategoryNumber int64        `json:"categoryNumber"`
 	Title          string       `json:"title"`
 	Body           string       `json:"body"`
 	Author         string       `json:"author"`
+	AuthorAvatar   string       `json:"authorAvatar"`
 	GameVersion    string       `json:"gameVersion"`
 	ModVersion     string       `json:"modVersion"`
 	ModList        string       `json:"modList"`
@@ -171,7 +176,7 @@ func ValidOptionalURL(value string) bool {
 
 func ValidStatus(status string) bool {
 	switch status {
-	case StatusOpen, StatusInProgress, StatusResolved, StatusClosed, StatusWithdrawn:
+	case StatusOpen, StatusInProgress, StatusTesting, StatusFixedUnreleased, StatusResolved, StatusClosed, StatusWithdrawn:
 		return true
 	default:
 		return false

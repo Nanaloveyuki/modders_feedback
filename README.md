@@ -35,6 +35,8 @@ The board has bug reports, feature requests, and general questions. Signed-in us
 
 SQLite is created at `/data/feedback.db`; the Compose configuration persists `/data` in the `feedback-data` volume. The service also writes an online backup to `/data/backups/feedback-<UTC timestamp>.db` at startup and every 72 hours. It keeps the 10 newest completed copies and deletes the oldest when a new copy is published. If the disk is full, it deletes the oldest completed copy and retries once; a failed attempt is removed and does not replace a good copy. A backup panic, including an out-of-memory failure inside the backup, is logged and does not stop the HTTP server. `GET /api/health` is available for monitoring.
 
+`GET /rss` is a public RSS 2.0 feed of the 50 newest feedback items across mods. Each item title is `mod-category-title`, and the description is the written feedback text. Image, video, and file markup is removed. `Accept-Language: en` switches the feed language and category labels to English.
+
 ## Local development
 
 The web app runs with Vite and proxies `/api` to the Go service during development. Build the frontend with `cd web && npm ci && npm run build`. Start the API from the `server/` directory with `DATA_DIR=../data ADMIN_USERNAME=admin ADMIN_PASSWORD='admin123456_' JWT_SECRET='local-random-secret-at-least-32-characters' go run ./cmd/feedback`; it serves the built `web/dist` files when started there. For Vite hot reload, run `npm run dev` from `web/` in a second terminal.

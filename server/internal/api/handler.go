@@ -50,6 +50,7 @@ func (h *Handler) Routes() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, middleware.Timeout(15*time.Second))
 	r.Get("/api/health", h.health)
+	r.Get("/rss", h.rss)
 	r.Post("/api/auth/login", h.login)
 	r.Post("/api/auth/register", h.register)
 	r.Post("/api/auth/logout", h.logout)

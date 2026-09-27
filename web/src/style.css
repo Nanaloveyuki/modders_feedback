@@ -501,7 +501,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .sidebar { grid-template-columns: minmax(0, 1fr); }
   .feed { padding: 14px 12px 6px; }
   .feedback-row { grid-template-columns: minmax(0, 1fr) auto; padding: 12px; }
-  .row-status, .row-arrow { display: none; }
+  .row-status, .row-author, .row-time, .row-arrow { display: none; }
+  .row-meta-mobile { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .row-title, .row-excerpt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 
   .admin-page, .admin-denied { width: calc(100% - 16px); }

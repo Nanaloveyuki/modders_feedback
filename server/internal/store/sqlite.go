@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS feedback (
  title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
  game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
  mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
- status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed','withdrawn')),
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','testing','fixed_unreleased','resolved','closed','withdrawn')),
  created_at DATETIME NOT NULL
 );
 CREATE TABLE IF NOT EXISTS site_settings (
@@ -100,6 +100,9 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 		return err
 	}
 	if err = s.ensureWithdrawnStatus(); err != nil {
+		return err
+	}
+	if err = s.ensureExtendedStatus(); err != nil {
 		return err
 	}
 	if err = s.ensureAttachments(); err != nil {
@@ -137,7 +140,7 @@ func (s *Store) ensureWithdrawnStatus() error {
  title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
  game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
  mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
- status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed','withdrawn')),
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','testing','fixed_unreleased','resolved','closed','withdrawn')),
  created_at DATETIME NOT NULL
 )`,
 		`INSERT INTO feedback_status_migration(id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at)
@@ -146,6 +149,49 @@ func (s *Store) ensureWithdrawnStatus() error {
 		`ALTER TABLE feedback_status_migration RENAME TO feedback`,
 		`CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`,
+	}
+	for _, statement := range statements {
+		if _, err = tx.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+
+}
+
+func (s *Store) ensureExtendedStatus() error {
+	var definition string
+	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'feedback'`).Scan(&definition); err != nil {
+		return err
+	}
+	if strings.Contains(definition, "'testing'") && strings.Contains(definition, "'fixed_unreleased'") {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE feedback_status_extended (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ public_id TEXT NOT NULL DEFAULT '',
+ mod_id INTEGER REFERENCES mods(id),
+ category TEXT NOT NULL CHECK(category IN ('bug','feature','question')),
+ category_number INTEGER,
+ title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
+ game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
+ mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','testing','fixed_unreleased','resolved','closed','withdrawn')),
+ created_at DATETIME NOT NULL
+)`,
+		`INSERT INTO feedback_status_extended(id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at)
+ SELECT id,COALESCE(public_id, ''),mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`,
+		`DROP TABLE feedback`,
+		`ALTER TABLE feedback_status_extended RENAME TO feedback`,
+		`CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_public_id ON feedback(public_id) WHERE public_id != ''`,
 	}
 	for _, statement := range statements {
 		if _, err = tx.Exec(statement); err != nil {
@@ -429,7 +475,7 @@ func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([
 	if offset < 0 {
 		offset = 0
 	}
-	query := `SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ?`
+	query := `SELECT id,public_id,mod_id,category,category_number,title,body,author,(SELECT CASE WHEN avatar IS NULL OR length(avatar) = 0 THEN '' ELSE '/api/account/avatar?u=' || username END FROM users WHERE username = feedback.author),game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ?`
 	args := []any{modID}
 	if category != "" {
 		query += " AND category = ?"
@@ -445,7 +491,7 @@ func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([
 	items := make([]domain.Feedback, 0, limit)
 	for rows.Next() {
 		var item domain.Feedback
-		if err := rows.Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.AuthorAvatar, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -457,6 +503,26 @@ func (s *Store) ListFeedback(modID int64, category string, limit, offset int) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+func (s *Store) ListRecentFeedback(limit int) ([]domain.Feedback, error) {
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT feedback.id,feedback.public_id,feedback.mod_id,feedback.category,feedback.category_number,feedback.title,feedback.body,feedback.author,feedback.game_version,feedback.mod_version,feedback.mod_list,feedback.save_link,feedback.status,feedback.created_at,mods.slug,mods.name FROM feedback JOIN mods ON mods.id = feedback.mod_id ORDER BY feedback.created_at DESC, feedback.id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]domain.Feedback, 0, limit)
+	for rows.Next() {
+		var item domain.Feedback
+		if err := rows.Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt, &item.ModSlug, &item.ModName); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *Store) CreateFeedback(item domain.Feedback) (domain.Feedback, error) {
@@ -546,9 +612,9 @@ func (s *Store) UpdateFeedback(id int64, update domain.FeedbackUpdate) (domain.F
 func (s *Store) GetFeedback(id int64) (domain.Feedback, error) {
 	var item domain.Feedback
 	err := s.db.QueryRow(
-		`SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE id = ?`,
+		`SELECT id,public_id,mod_id,category,category_number,title,body,author,(SELECT CASE WHEN avatar IS NULL OR length(avatar) = 0 THEN '' ELSE '/api/account/avatar?u=' || username END FROM users WHERE username = feedback.author),game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE id = ?`,
 		id,
-	).Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
+	).Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.AuthorAvatar, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
 	if err != nil {
 		return item, err
 	}
@@ -561,9 +627,9 @@ func (s *Store) GetFeedback(id int64) (domain.Feedback, error) {
 func (s *Store) GetFeedbackByPublicID(modID int64, category, publicID string) (domain.Feedback, error) {
 	var item domain.Feedback
 	err := s.db.QueryRow(
-		`SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ? AND category = ? AND public_id = ?`,
+		`SELECT id,public_id,mod_id,category,category_number,title,body,author,(SELECT CASE WHEN avatar IS NULL OR length(avatar) = 0 THEN '' ELSE '/api/account/avatar?u=' || username END FROM users WHERE username = feedback.author),game_version,mod_version,mod_list,save_link,status,created_at FROM feedback WHERE mod_id = ? AND category = ? AND public_id = ?`,
 		modID, category, publicID,
-	).Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
+	).Scan(&item.ID, &item.PublicID, &item.ModID, &item.Category, &item.CategoryNumber, &item.Title, &item.Body, &item.Author, &item.AuthorAvatar, &item.GameVersion, &item.ModVersion, &item.ModList, &item.SaveLink, &item.Status, &item.CreatedAt)
 	if err != nil {
 		return item, err
 	}

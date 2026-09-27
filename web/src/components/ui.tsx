@@ -73,11 +73,11 @@ export function TextButton({ active = false, style, children, ...props }: TextBu
   );
 }
 
-export function Avatar({ name }: { name: string }) {
+export function Avatar({ name, src }: { name: string; src?: string }) {
   const { palette } = useTheme();
   return (
     <span className="author-avatar" style={{ color: palette.goldInk, background: palette.accent }}>
-      {name.slice(0, 1).toUpperCase()}
+      {src ? <img src={src} alt="" /> : name.slice(0, 1).toUpperCase()}
     </span>
   );
 }
