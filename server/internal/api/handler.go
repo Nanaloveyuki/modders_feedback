@@ -65,9 +65,14 @@ func (h *Handler) Routes() *chi.Mux {
 	r.Delete("/api/mods/{id}", h.deleteMod)
 	r.Get("/api/feedback", h.listFeedback)
 	r.Post("/api/feedback", h.createFeedback)
+	r.Patch("/api/feedback/status", h.updateStatuses)
 	r.Patch("/api/feedback/{id}/status", h.updateStatus)
-	r.Patch("/api/feedback/{id}", h.updateFeedback)
+	r.Put("/api/settings/statuses", h.replaceStatuses)
 	r.Delete("/api/feedback/{id}", h.deleteFeedback)
+	r.Get("/api/feedback/{id}/timeline", h.listTimeline)
+	r.Post("/api/feedback/{id}/comments", h.createComment)
+	r.Patch("/api/feedback/{id}/comments/{commentId}", h.updateComment)
+	r.Delete("/api/feedback/{id}/comments/{commentId}", h.deleteComment)
 	r.Post("/api/feedback/{id}/attachments", h.uploadFeedbackAttachment)
 	r.Post("/api/attachments", h.uploadDraftAttachment)
 	r.Get("/api/attachments/{id}", h.getAttachment)
@@ -381,37 +386,114 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 	if !httpx.Decode(w, r, &input) {
 		return
 	}
-	if !domain.ValidStatus(input.Status) {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈状态无效", "Invalid feedback status"))
-		return
-	}
 	id, ok := feedbackID(w, r)
 	if !ok {
 		return
 	}
-	item, err := h.store.GetFeedback(id)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
-		return
-	}
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
-		return
-	}
-	if user.Role != "admin" && (!authorOf(user, item) || !authorStatusChange(item.Status, input.Status)) {
-		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能在自己的反馈中切换待处理和已撤回", "You can only switch your own feedback between open and withdrawn"))
-		return
-	}
-	updated, err := h.store.UpdateStatus(id, input.Status)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
-		return
-	}
-	if !updated {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+	if !h.applyStatus(w, r, user, id, input.Status) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]string{"status": input.Status})
+}
+
+func (h *Handler) updateStatuses(w http.ResponseWriter, r *http.Request) {
+	user, ok := h.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		IDs    []int64 `json:"ids"`
+		Status string  `json:"status"`
+	}
+	if !httpx.Decode(w, r, &input) {
+		return
+	}
+	if len(input.IDs) == 0 || len(input.IDs) > 100 {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请选择 1-100 条反馈", "Choose 1-100 feedback items"))
+		return
+	}
+	seen := map[int64]bool{}
+	for _, id := range input.IDs {
+		if id < 1 || seen[id] {
+			httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈编号无效", "Invalid feedback id"))
+			return
+		}
+		seen[id] = true
+	}
+	for _, id := range input.IDs {
+		if !h.applyStatus(w, r, user, id, input.Status) {
+			return
+		}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"status": input.Status, "ids": input.IDs})
+}
+
+func (h *Handler) applyStatus(w http.ResponseWriter, r *http.Request, user domain.User, id int64, status string) bool {
+	settings, err := h.store.SiteSettings()
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
+		return false
+	}
+	next, ok := domain.StatusByKey(settings.Statuses, status)
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈状态无效", "Invalid feedback status"))
+		return false
+	}
+	item, err := h.store.GetFeedback(id)
+	if errors.Is(err, sql.ErrNoRows) {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		return false
+	}
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
+		return false
+	}
+	current, known := domain.StatusByKey(settings.Statuses, item.Status)
+	if user.Role != "admin" && (!authorOf(user, item) || !known || !current.Author || !next.Author) {
+		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能在自己的反馈中切换允许的状态", "You can only switch your own feedback between allowed statuses"))
+		return false
+	}
+	updated, err := h.store.UpdateStatus(id, user.Username, status)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
+		return false
+	}
+	if !updated {
+		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		return false
+	}
+	return true
+}
+
+func (h *Handler) replaceStatuses(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	var input domain.StatusCatalog
+	if !httpx.Decode(w, r, &input) {
+		return
+	}
+	for i := range input.Statuses {
+		input.Statuses[i].Key = strings.TrimSpace(input.Statuses[i].Key)
+		input.Statuses[i].LabelZh = strings.TrimSpace(input.Statuses[i].LabelZh)
+		input.Statuses[i].LabelEn = strings.TrimSpace(input.Statuses[i].LabelEn)
+		input.Statuses[i].Light = strings.ToLower(strings.TrimSpace(input.Statuses[i].Light))
+		input.Statuses[i].Dark = strings.ToLower(strings.TrimSpace(input.Statuses[i].Dark))
+	}
+	if !domain.ValidStatusCatalog(input.Statuses) {
+		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查状态标识、名称和颜色", "Check the status keys, names, and colors"))
+		return
+	}
+	if err := h.store.ReplaceStatuses(input.Statuses); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "保存状态失败", "Could not save statuses"))
+		return
+	}
+	settings, err := h.store.SiteSettings()
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取站点设置失败", "Could not load site settings"))
+		return
+	}
+	httpx.JSON(w, http.StatusOK, settings)
 }
 
 func (h *Handler) updateFeedback(w http.ResponseWriter, r *http.Request) {
@@ -454,7 +536,7 @@ func (h *Handler) updateFeedback(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能编辑自己的反馈", "You can only edit your own feedback"))
 		return
 	}
-	item, updated, err := h.store.UpdateFeedback(id, input)
+	item, updated, err := h.store.UpdateFeedback(id, user.Username, input)
 	if err != nil {
 		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈失败", "Could not update feedback"))
 		return
@@ -516,6 +598,7 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "读取站点设置失败", "Could not load site settings"))
 		return
 	}
+	input.Statuses = current.Statuses
 	if input.AttachmentDir != current.AttachmentDir {
 		if err = h.store.MoveAttachmentDir(current.AttachmentDir, input.AttachmentDir); err != nil {
 			httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "无法使用这个附件目录", "Could not use that attachment directory"))
@@ -870,10 +953,6 @@ func (h *Handler) currentUser(w http.ResponseWriter, r *http.Request) (domain.Us
 
 func authorOf(user domain.User, item domain.Feedback) bool {
 	return user.Username == item.Author
-}
-
-func authorStatusChange(current, next string) bool {
-	return (current == domain.StatusOpen || current == domain.StatusWithdrawn) && (next == domain.StatusOpen || next == domain.StatusWithdrawn)
 }
 
 func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) (domain.User, bool) {

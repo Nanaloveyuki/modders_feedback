@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"modders-feedback/server/internal/domain"
 )
 
 func TestFilesRoundTripAndRecompress(t *testing.T) {
@@ -17,7 +15,7 @@ func TestFilesRoundTripAndRecompress(t *testing.T) {
 	}
 	raw := bytes.Repeat([]byte("screenshot-bytes-"), 4000)
 	const id = "0123456789abcdef0123456789abcdef"
-	if err = files.Save(id, raw, domain.StatusOpen); err != nil {
+	if err = files.Save(id, raw, false); err != nil {
 		t.Fatal(err)
 	}
 	fast, err := os.ReadFile(files.objectPath(id))
@@ -34,7 +32,7 @@ func TestFilesRoundTripAndRecompress(t *testing.T) {
 	if !bytes.Equal(opened, raw) {
 		t.Fatal("opened bytes differ")
 	}
-	if err = files.Save(id, raw, domain.StatusResolved); err != nil {
+	if err = files.Save(id, raw, true); err != nil {
 		t.Fatal(err)
 	}
 	maxed, err := os.ReadFile(files.objectPath(id))

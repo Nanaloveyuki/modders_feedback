@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle, CircleHelp, Sparkles } from 'lucide-react';
 import { localeTag, useI18n } from '../i18n/context';
-import type { MessageKey } from '../i18n/messages';
-import type { Category, Status } from '../types';
+import type { Category, Status, StatusLabel } from '../types';
 
 export const categoryIcons: Record<Category, ReactNode> = {
   bug: <AlertTriangle size={15} />,
@@ -12,24 +11,21 @@ export const categoryIcons: Record<Category, ReactNode> = {
 
 export const categoryKeys = Object.keys(categoryIcons) as Category[];
 
-export const statusKeys: Status[] = ['open', 'in_progress', 'testing', 'fixed_unreleased', 'resolved', 'closed', 'withdrawn'];
-export const authorStatusKeys: Status[] = ['open', 'withdrawn'];
+export function statusLabel(statuses: StatusLabel[], key: Status, locale: 'zh' | 'en') {
+  const item = statuses.find((entry) => entry.key === key);
+  if (!item) return key;
+  return locale === 'en' ? item.labelEn : item.labelZh;
+}
 
-export const statusStyle: Record<Status, string> = {
-  open: 'status-open',
-  in_progress: 'status-progress',
-  testing: 'status-testing',
-  fixed_unreleased: 'status-fixed',
-  resolved: 'status-resolved',
-  closed: 'status-closed',
-  withdrawn: 'status-withdrawn',
-};
+export function authorStatuses(statuses: StatusLabel[]) {
+  return statuses.filter((item) => item.author);
+}
 
-export function useLabels() {
+export function useLabels(statuses: StatusLabel[] = []) {
   const { locale, t } = useI18n();
   return {
     category: (key: Category) => t(key),
-    status: (key: Status) => t(key as MessageKey),
+    status: (key: Status) => statusLabel(statuses, key, locale),
     ago(date: string) {
       const hours = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 3600000));
       if (hours < 1) return t('justNow');

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import { AttachmentEditor, editorTarget } from './AttachmentEditor';
@@ -6,7 +6,7 @@ import { siteIconKeys, siteIcons } from '../lib/icons';
 import { useLabels } from '../lib/labels';
 import { adminPages, adminPath, navigate, type AdminPage } from '../router';
 import { useTheme } from '../theme/context';
-import type { Feedback, FeedbackUpdate, Mod, ModInput, SiteIcon, SiteSettings } from '../types';
+import type { Feedback, FeedbackUpdate, Mod, ModInput, SiteIcon, SiteSettings, StatusLabel } from '../types';
 import { ActionButton, Field } from './ui';
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
   settings: SiteSettings;
   mods: Mod[];
   onSaveSettings: (settings: SiteSettings) => Promise<void>;
+  onSaveStatuses: (statuses: StatusLabel[]) => Promise<void>;
   onSaveRecord: (item: Feedback, update: FeedbackUpdate) => Promise<void>;
   onDeleteRecord: (item: Feedback) => Promise<void>;
   onSaveMod: (item: Mod, input: ModInput) => Promise<void>;
@@ -31,7 +32,7 @@ const emptyMod = {
   githubUrl: '',
 };
 
-export function AdminPanel({ page, items, settings, mods, onSaveSettings, onSaveRecord, onDeleteRecord, onSaveMod, onAddMod, onDeleteMod }: Props) {
+export function AdminPanel({ page, items, settings, mods, onSaveSettings, onSaveStatuses, onSaveRecord, onDeleteRecord, onSaveMod, onAddMod, onDeleteMod }: Props) {
   const { t } = useI18n();
   const { palette } = useTheme();
 
@@ -65,20 +66,24 @@ export function AdminPanel({ page, items, settings, mods, onSaveSettings, onSave
           );
         })}
       </nav>
-      {page === 'settings' && <SettingsPage settings={settings} onSaveSettings={onSaveSettings} />}
+      {page === 'settings' && <SettingsPage settings={settings} onSaveSettings={onSaveSettings} onSaveStatuses={onSaveStatuses} />}
       {page === 'mods' && <ModsPage mods={mods} onSaveMod={onSaveMod} onAddMod={onAddMod} onDeleteMod={onDeleteMod} />}
       {page === 'feedback' && <FeedbackPage items={items} onSaveRecord={onSaveRecord} onDeleteRecord={onDeleteRecord} />}
     </section>
   );
 }
 
-function SettingsPage({ settings, onSaveSettings }: Pick<Props, 'settings' | 'onSaveSettings'>) {
+function SettingsPage({ settings, onSaveSettings, onSaveStatuses }: Pick<Props, 'settings' | 'onSaveSettings' | 'onSaveStatuses'>) {
   const { t } = useI18n();
   const { palette } = useTheme();
   const control = { color: palette.text, background: palette.field };
   const [icon, setIcon] = useState<SiteIcon>(settings.icon);
+  const [statuses, setStatuses] = useState<StatusLabel[]>(settings.statuses);
   const [pending, setPending] = useState(false);
+  const [statusPending, setStatusPending] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => { setStatuses(settings.statuses); }, [settings.statuses]);
 
   async function saveSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,6 +96,7 @@ function SettingsPage({ settings, onSaveSettings }: Pick<Props, 'settings' | 'on
         gameVersion: String(form.get('gameVersion') ?? ''),
         icon,
         attachmentDir: String(form.get('attachmentDir') ?? ''),
+        statuses: settings.statuses,
       });
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('settingsFailed'));
@@ -99,17 +105,74 @@ function SettingsPage({ settings, onSaveSettings }: Pick<Props, 'settings' | 'on
     }
   }
 
+  function updateStatus(index: number, patch: Partial<StatusLabel>) {
+    setStatuses((current) => current.map((item, position) => position === index ? { ...item, ...patch } : item));
+  }
+
+  async function saveStatuses() {
+    setStatusPending(true);
+    setError('');
+    try {
+      await onSaveStatuses(statuses);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : t('statusesFailed'));
+    } finally {
+      setStatusPending(false);
+    }
+  }
+
   return (
-    <form className="form-stack admin-settings admin-card" style={{ background: palette.surface }} onSubmit={(event) => void saveSettings(event)}>
-      <div className="form-two">
-        <Field label={t('currentMod')}><input name="modVersion" required maxLength={40} defaultValue={settings.modVersion} style={control} /></Field>
-        <Field label={t('gameVersion')}><input name="gameVersion" required maxLength={40} defaultValue={settings.gameVersion} style={control} /></Field>
-      </div>
-      <Field label={t('attachmentDir')}><input name="attachmentDir" required maxLength={240} defaultValue={settings.attachmentDir} style={control} /></Field>
-      <IconPicker value={icon} onChange={setIcon} />
+    <div className="admin-stack">
+      <form className="form-stack admin-settings admin-card" style={{ background: palette.surface }} onSubmit={(event) => void saveSettings(event)}>
+        <div className="form-two">
+          <Field label={t('currentMod')}><input name="modVersion" required maxLength={40} defaultValue={settings.modVersion} style={control} /></Field>
+          <Field label={t('gameVersion')}><input name="gameVersion" required maxLength={40} defaultValue={settings.gameVersion} style={control} /></Field>
+        </div>
+        <Field label={t('attachmentDir')}><input name="attachmentDir" required maxLength={240} defaultValue={settings.attachmentDir} style={control} /></Field>
+        <IconPicker value={icon} onChange={setIcon} />
+        <ActionButton className="form-submit" disabled={pending}>{pending ? t('savingSettings') : t('saveSettings')}</ActionButton>
+      </form>
+      <section className="form-stack admin-card" style={{ background: palette.surface }}>
+        <h2 style={{ color: palette.text }}>{t('statusTags')}</h2>
+        <div className="status-editor-list">
+          {statuses.map((item, index) => (
+            <div className="status-editor-row" key={`${item.key}-${index}`}>
+              <Field label={t('statusKey')}><input value={item.key} maxLength={32} disabled={item.key === 'open'} onChange={(event) => updateStatus(index, { key: event.target.value })} style={control} /></Field>
+              <Field label={t('statusNameZh')}><input value={item.labelZh} maxLength={24} onChange={(event) => updateStatus(index, { labelZh: event.target.value })} style={control} /></Field>
+              <Field label={t('statusNameEn')}><input value={item.labelEn} maxLength={24} onChange={(event) => updateStatus(index, { labelEn: event.target.value })} style={control} /></Field>
+              <label className="status-color" style={{ color: palette.muted }}>
+                {t('statusLight')}
+                <input type="color" value={item.light} onChange={(event) => updateStatus(index, { light: event.target.value })} />
+                <span className="status-pill" style={{ color: '#1c1812', background: item.light }}><i />{item.labelZh}</span>
+              </label>
+              <label className="status-color" style={{ color: palette.muted }}>
+                {t('statusDark')}
+                <input type="color" value={item.dark} onChange={(event) => updateStatus(index, { dark: event.target.value })} />
+                <span className="status-pill" style={{ color: '#f4efe4', background: item.dark }}><i />{item.labelZh}</span>
+              </label>
+              <label className="status-flag" style={{ color: palette.text }}>
+                <input type="checkbox" checked={item.author} disabled={item.key === 'open'} onChange={(event) => updateStatus(index, { author: event.target.checked })} />
+                {t('statusAuthor')}
+              </label>
+              <label className="status-flag" style={{ color: palette.text }}>
+                <input type="checkbox" checked={item.archived} onChange={(event) => updateStatus(index, { archived: event.target.checked })} />
+                {t('statusArchived')}
+              </label>
+              <button type="button" className="status-remove" disabled={item.key === 'open'} style={{ color: palette.danger }} onClick={() => setStatuses((current) => current.filter((_, position) => position !== index))}>
+                <Trash2 size={14} />{t('removeStatus')}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="issue-editor-actions">
+          <button type="button" className="form-switch" style={{ color: palette.gold }} onClick={() => setStatuses((current) => [...current, { key: `status_${current.length + 1}`, labelZh: '新状态', labelEn: 'New', light: '#3f8f6b', dark: '#5dbe8a', author: false, archived: false }])}>
+            <Plus size={14} />{t('addStatus')}
+          </button>
+          <ActionButton disabled={statusPending} onClick={() => void saveStatuses()}>{statusPending ? t('savingStatuses') : t('saveStatuses')}</ActionButton>
+        </div>
+      </section>
       {error && <p className="form-error" role="alert" style={{ color: palette.danger }}>{error}</p>}
-      <ActionButton className="form-submit" disabled={pending}>{pending ? t('savingSettings') : t('saveSettings')}</ActionButton>
-    </form>
+    </div>
   );
 }
 

@@ -1,5 +1,5 @@
 export type Category = 'bug' | 'feature' | 'question';
-export type Status = 'open' | 'in_progress' | 'testing' | 'fixed_unreleased' | 'resolved' | 'closed' | 'withdrawn';
+export type Status = string;
 
 export type Feedback = {
   id: number;
@@ -52,11 +52,22 @@ export type FeedbackDraft = {
   saveLink: string;
 };
 
+export type StatusLabel = {
+  key: string;
+  labelZh: string;
+  labelEn: string;
+  light: string;
+  dark: string;
+  author: boolean;
+  archived: boolean;
+};
+
 export type SiteSettings = {
   modVersion: string;
   gameVersion: string;
   icon: SiteIcon;
   attachmentDir: string;
+  statuses: StatusLabel[];
 };
 
 export type SiteIcon = 'squirrel' | 'rat' | 'bug' | 'spark' | 'shield' | 'paw';
@@ -89,4 +100,33 @@ export type ModInput = {
   icon: SiteIcon;
   steamUrl: string;
   githubUrl: string;
+};
+
+export type Comment = {
+  id: number;
+  feedbackId: number;
+  author: string;
+  authorAvatar: string;
+  body: string;
+  replyTo?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TimelineKind = 'comment' | 'status' | 'edited' | 'comment_edited' | 'deleted';
+
+export type TimelineEvent = {
+  id: number;
+  kind: TimelineKind;
+  actor: string;
+  actorAvatar: string;
+  body?: string;
+  replyTo?: number;
+  status?: Status;
+  commentId?: number;
+  createdAt: string;
+};
+
+export type Timeline = {
+  events: TimelineEvent[];
 };

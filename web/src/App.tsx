@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
-import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, getFeedback, listFeedback, listMods, login, logout, register, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus } from './api/feedback';
+import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, getFeedback, listFeedback, listMods, login, logout, register, replaceStatuses, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus, updateStatuses } from './api/feedback';
 import { AccountPage } from './components/AccountPage';
 import { AdminPanel } from './components/AdminPanel';
 import { Detail } from './components/Detail';
@@ -15,7 +15,7 @@ import { useI18n } from './i18n/context';
 import { defaultSettings } from './lib/icons';
 import { adminPath, currentRoute, feedbackPath, navigate, type Route } from './router';
 import { useTheme } from './theme/context';
-import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, SiteSettings, Status, User } from './types';
+import type { Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, SiteSettings, Status, StatusLabel, User } from './types';
 
 const pageSize = 7;
 
@@ -220,12 +220,38 @@ export function App() {
   async function changeStatus(item: Feedback, next: Status) {
     try {
       await updateStatus(item.id, next, locale);
-      setItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
-      setAdminItems((previous) => previous.map((entry) => entry.id === item.id ? { ...entry, status: next } : entry));
-      setRouted((previous) => previous?.id === item.id ? { ...previous, status: next } : previous);
+      applyStatus([item.id], next);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : t('statusFailed'));
     }
+  }
+
+  async function changeStatuses(ids: number[], next: Status) {
+    try {
+      await updateStatuses(ids, next, locale);
+      applyStatus(ids, next);
+    } catch (problem) {
+      setError(problem instanceof Error ? problem.message : t('statusFailed'));
+      throw problem;
+    }
+  }
+
+  function applyStatus(ids: number[], next: Status) {
+    const chosen = new Set(ids);
+    setItems((previous) => previous.map((entry) => chosen.has(entry.id) ? { ...entry, status: next } : entry));
+    setAdminItems((previous) => previous.map((entry) => chosen.has(entry.id) ? { ...entry, status: next } : entry));
+    setRouted((previous) => previous && chosen.has(previous.id) ? { ...previous, status: next } : previous);
+  }
+
+  async function saveStatuses(statuses: StatusLabel[]) {
+    const saved = await replaceStatuses(statuses, locale);
+    setSettings(saved);
+    const live = new Set(saved.statuses.map((item) => item.key));
+    const fold = (entry: Feedback) => live.has(entry.status) ? entry : { ...entry, status: 'open' };
+    setItems((previous) => previous.map(fold));
+    setAdminItems((previous) => previous.map(fold));
+    setRouted((previous) => previous ? fold(previous) : previous);
+    setNotice(t('statusesSaved'));
   }
 
   return (
@@ -233,7 +259,7 @@ export function App() {
       <Topbar user={user} mod={activeMod} icon={activeMod?.icon ?? settings.icon} name={activeMod?.name} onLogin={() => { setError(''); setModal('login'); }} onLogout={() => void signOut()} onAdmin={() => { if (user?.role === 'admin') navigate(adminPath('settings')); }} />
       {route.name === 'admin' ? (
         user?.role === 'admin' ? (
-          <AdminPanel page={route.page} items={adminItems} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} />
+          <AdminPanel page={route.page} items={adminItems} settings={settings} mods={mods} onSaveSettings={saveSettings} onSaveStatuses={saveStatuses} onSaveRecord={saveRecord} onDeleteRecord={removeRecord} onSaveMod={saveMod} onAddMod={addMod} onDeleteMod={removeMod} />
         ) : (
           <main className="admin-denied">
             <h1 style={{ color: palette.text }}>{t('adminDenied')}</h1>
@@ -262,7 +288,7 @@ export function App() {
           <button type="button" className="create-button" onClick={() => navigate('/')}>{t('adminBack')}</button>
         </main>
       ) : route.name === 'feedback' && routed ? (
-        <Detail item={routed} modSlug={mods.find((mod) => mod.id === routed.modId)?.slug ?? modSlug} canManage={user?.role === 'admin'} canEdit={Boolean(user && routed.author === user.username)} onStatus={changeStatus} onSave={saveRecord} />
+        <Detail item={routed} modSlug={mods.find((mod) => mod.id === routed.modId)?.slug ?? modSlug} canManage={user?.role === 'admin'} canEdit={Boolean(user && routed.author === user.username)} user={user} statuses={settings.statuses} onLogin={() => setModal('login')} onStatus={changeStatus} onSave={saveRecord} />
       ) : route.name === 'feedback' ? (
         <main className="admin-denied"><span className="loading-dash" /></main>
       ) : (
@@ -285,6 +311,10 @@ export function App() {
           onPage={setPage}
           onOpen={openFeedback}
           onCreate={openComposer}
+          statuses={settings.statuses}
+          user={user}
+          onChangeStatus={changeStatus}
+          onChangeStatuses={changeStatuses}
         />
       </main>
       )}

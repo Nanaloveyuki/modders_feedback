@@ -2,26 +2,30 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, Clipboard, ExternalLink } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import { AttachmentEditor, editorTarget } from './AttachmentEditor';
-import { authorStatusKeys, categoryIcons, statusKeys, statusStyle, useLabels } from '../lib/labels';
+import { categoryIcons, statusLabel, useLabels } from '../lib/labels';
 import { feedbackPath, navigate } from '../router';
 import { useTheme } from '../theme/context';
-import type { Feedback, FeedbackUpdate, Status } from '../types';
+import type { Feedback, FeedbackUpdate, Status, StatusLabel, User } from '../types';
 import { statusColors } from './FeedbackList';
 import { MarkdownBody } from './MarkdownBody';
 import { ActionButton, Avatar, Field } from './ui';
+import { Comments } from './Comments';
 
 type Props = {
   item: Feedback;
   modSlug: string;
   canManage: boolean;
   canEdit: boolean;
+  user: User | null;
+  statuses: StatusLabel[];
+  onLogin: () => void;
   onStatus: (item: Feedback, status: Status) => Promise<void>;
   onSave: (item: Feedback, update: FeedbackUpdate) => Promise<void>;
 };
 
-export function Detail({ item, modSlug, canManage, canEdit, onStatus, onSave }: Props) {
+export function Detail({ item, modSlug, canManage, canEdit, user, statuses, onLogin, onStatus, onSave }: Props) {
   const { t, locale } = useI18n();
-  const labels = useLabels();
+  const labels = useLabels(statuses);
   const { palette } = useTheme();
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(item.body);
@@ -29,7 +33,7 @@ export function Detail({ item, modSlug, canManage, canEdit, onStatus, onSave }: 
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const control = { color: palette.text, background: palette.field };
-  const choices = canManage ? statusKeys : authorStatusKeys;
+  const choices = canManage ? statuses : statuses.filter((entry) => entry.author);
   const categoryColor = item.category === 'bug' ? palette.bug : item.category === 'feature' ? palette.feature : palette.question;
   const number = String(item.categoryNumber ?? item.id).padStart(3, '0');
   const canChange = canEdit || canManage;
@@ -85,7 +89,7 @@ export function Detail({ item, modSlug, canManage, canEdit, onStatus, onSave }: 
           {item.title} <span style={{ color: palette.faint }}>#{number}</span>
         </h1>
         <div className="issue-meta" style={{ color: palette.muted }}>
-          <span className={`status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</span>
+          <span className="status-pill" style={statusColors(statuses, item.status, palette.dark)}><i />{labels.status(item.status)}</span>
           <span className={`row-category cat-${item.category}`} style={{ color: categoryColor }}>
             {categoryIcons[item.category]}<span>{labels.category(item.category)}</span>
           </span>
@@ -130,19 +134,20 @@ export function Detail({ item, modSlug, canManage, canEdit, onStatus, onSave }: 
           ) : (
             <div className="detail-body"><MarkdownBody source={item.body} /></div>
           )}
+          <Comments item={item} user={user} statuses={statuses} onLogin={onLogin} />
         </article>
         <aside className="issue-side">
           <section style={{ background: palette.surface }}>
             <h2 style={{ color: palette.faint }}>{t('updateStatus')}</h2>
             {(canManage || canEdit) ? (
               <label className="status-editor" style={{ color: palette.muted }}>
-                <select value={item.status} disabled={!canManage && !choices.includes(item.status)} onChange={(event) => void onStatus(item, event.target.value as Status)} style={{ color: palette.text, background: palette.field }}>
-                  {!choices.includes(item.status) && <option value={item.status}>{labels.status(item.status)}</option>}
-                  {choices.map((key) => <option key={key} value={key}>{labels.status(key)}</option>)}
+                <select value={item.status} disabled={!canManage && !choices.some((entry) => entry.key === item.status)} onChange={(event) => void onStatus(item, event.target.value)} style={{ color: palette.text, background: palette.field }}>
+                  {!choices.some((entry) => entry.key === item.status) && <option value={item.status}>{labels.status(item.status)}</option>}
+                  {choices.map((entry) => <option key={entry.key} value={entry.key}>{statusLabel(statuses, entry.key, locale)}</option>)}
                 </select>
               </label>
             ) : (
-              <strong className={`status-pill ${statusStyle[item.status]}`} style={statusColors(palette, item.status)}><i />{labels.status(item.status)}</strong>
+              <strong className="status-pill" style={statusColors(statuses, item.status, palette.dark)}><i />{labels.status(item.status)}</strong>
             )}
           </section>
           <section style={{ background: palette.surface }}>

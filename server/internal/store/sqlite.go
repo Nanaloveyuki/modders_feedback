@@ -3,6 +3,7 @@ package store
 import (
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -114,6 +115,15 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 	if err = s.ensurePublicID(); err != nil {
 		return err
 	}
+	if err = s.ensureOpenStatus(); err != nil {
+		return err
+	}
+	if err = s.ensureComments(); err != nil {
+		return err
+	}
+	if err = s.ensureCommentID(); err != nil {
+		return err
+	}
 	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`)
 	return err
 }
@@ -189,6 +199,48 @@ func (s *Store) ensureExtendedStatus() error {
  SELECT id,COALESCE(public_id, ''),mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`,
 		`DROP TABLE feedback`,
 		`ALTER TABLE feedback_status_extended RENAME TO feedback`,
+		`CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_public_id ON feedback(public_id) WHERE public_id != ''`,
+	}
+	for _, statement := range statements {
+		if _, err = tx.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ensureOpenStatus() error {
+	var definition string
+	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'feedback'`).Scan(&definition); err != nil {
+		return err
+	}
+	if !strings.Contains(definition, "CHECK(status IN (") {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`CREATE TABLE feedback_status_open (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ public_id TEXT NOT NULL DEFAULT '',
+ mod_id INTEGER REFERENCES mods(id),
+ category TEXT NOT NULL CHECK(category IN ('bug','feature','question')),
+ category_number INTEGER,
+ title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
+ game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
+ mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'open',
+ created_at DATETIME NOT NULL
+)`,
+		`INSERT INTO feedback_status_open(id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at)
+ SELECT id,COALESCE(public_id, ''),mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`,
+		`DROP TABLE feedback`,
+		`ALTER TABLE feedback_status_open RENAME TO feedback`,
 		`CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS feedback_public_id ON feedback(public_id) WHERE public_id != ''`,
@@ -554,8 +606,13 @@ func (s *Store) CreateFeedback(item domain.Feedback) (domain.Feedback, error) {
 	return s.GetFeedback(item.ID)
 }
 
-func (s *Store) UpdateStatus(id int64, status string) (bool, error) {
-	result, err := s.db.Exec("UPDATE feedback SET status = ? WHERE id = ?", status, id)
+func (s *Store) UpdateStatus(id int64, actor, status string) (bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec("UPDATE feedback SET status = ? WHERE id = ?", status, id)
 	if err != nil {
 		return false, err
 	}
@@ -565,6 +622,12 @@ func (s *Store) UpdateStatus(id int64, status string) (bool, error) {
 	}
 	if count == 0 {
 		return false, nil
+	}
+	if err = insertEvent(tx, id, domain.EventStatus, actor, "", sql.NullInt64{}, status, sql.NullInt64{}); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return false, err
 	}
 	if err = s.RecompressFeedback(id, status); err != nil {
 		return false, err
@@ -587,8 +650,13 @@ func (s *Store) DeleteFeedback(id int64) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *Store) UpdateFeedback(id int64, update domain.FeedbackUpdate) (domain.Feedback, bool, error) {
-	result, err := s.db.Exec(
+func (s *Store) UpdateFeedback(id int64, actor string, update domain.FeedbackUpdate) (domain.Feedback, bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.Feedback{}, false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(
 		`UPDATE feedback SET title = ?, body = ?, game_version = ?, mod_version = ?, mod_list = ?, save_link = ? WHERE id = ?`,
 		update.Title, update.Body, update.GameVersion, update.ModVersion, update.ModList, update.SaveLink, id,
 	)
@@ -601,6 +669,12 @@ func (s *Store) UpdateFeedback(id int64, update domain.FeedbackUpdate) (domain.F
 	}
 	if count == 0 {
 		return domain.Feedback{}, false, nil
+	}
+	if err = insertEvent(tx, id, domain.EventEdited, actor, "", sql.NullInt64{}, "", sql.NullInt64{}); err != nil {
+		return domain.Feedback{}, false, err
+	}
+	if err = tx.Commit(); err != nil {
+		return domain.Feedback{}, false, err
 	}
 	if err = s.PruneUnreferenced(id, update.Body); err != nil {
 		return domain.Feedback{}, false, err
@@ -757,7 +831,7 @@ func (s *Store) SaveDraftAttachment(owner, name, contentType string, raw []byte)
 	if count >= domain.MaxAttachments {
 		return domain.Attachment{}, errors.New("attachment limit reached")
 	}
-	return s.insertAttachment(sql.NullInt64{}, owner, domain.StatusOpen, name, contentType, raw)
+	return s.insertAttachment(sql.NullInt64{}, owner, false, name, contentType, raw)
 }
 
 func (s *Store) SaveFeedbackAttachment(feedbackID int64, name, contentType string, raw []byte) (domain.Attachment, error) {
@@ -772,12 +846,12 @@ func (s *Store) SaveFeedbackAttachment(feedbackID int64, name, contentType strin
 	if count >= domain.MaxAttachments {
 		return domain.Attachment{}, errors.New("attachment limit reached")
 	}
-	return s.insertAttachment(sql.NullInt64{Int64: feedbackID, Valid: true}, "", item.Status, name, contentType, raw)
+	return s.insertAttachment(sql.NullInt64{Int64: feedbackID, Valid: true}, "", s.archivedStatus(item.Status), name, contentType, raw)
 }
 
-func (s *Store) insertAttachment(feedbackID sql.NullInt64, owner, status, name, contentType string, raw []byte) (domain.Attachment, error) {
+func (s *Store) insertAttachment(feedbackID sql.NullInt64, owner string, archived bool, name, contentType string, raw []byte) (domain.Attachment, error) {
 	id := newObjectID()
-	if err := s.files.Save(id, raw, status); err != nil {
+	if err := s.files.Save(id, raw, archived); err != nil {
 		return domain.Attachment{}, err
 	}
 	if _, err := s.db.Exec(
@@ -791,6 +865,18 @@ func (s *Store) insertAttachment(feedbackID sql.NullInt64, owner, status, name, 
 }
 
 func (s *Store) BindDraftAttachments(feedbackID int64, owner, body string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = s.bindDraftAttachments(tx, feedbackID, owner, body); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) bindDraftAttachments(tx *sql.Tx, feedbackID int64, owner, body string) error {
 	ids := attachmentIDs(body)
 	if len(ids) == 0 {
 		return nil
@@ -798,11 +884,6 @@ func (s *Store) BindDraftAttachments(feedbackID int64, owner, body string) error
 	if len(ids) > domain.MaxAttachments {
 		return errors.New("attachment limit reached")
 	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	for _, id := range ids {
 		result, err := tx.Exec(
 			`UPDATE attachments SET feedback_id = ?, owner = '' WHERE id = ? AND owner = ? AND feedback_id IS NULL`,
@@ -819,7 +900,7 @@ func (s *Store) BindDraftAttachments(feedbackID int64, owner, body string) error
 			return domain.ErrAttachmentMissing
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) PruneUnreferenced(feedbackID int64, body string) error {
@@ -937,9 +1018,21 @@ func (s *Store) RecompressFeedback(id int64, status string) error {
 		return err
 	}
 	for _, objectID := range objectIDs {
-		s.files.Schedule(objectID, status)
+		s.files.Schedule(objectID, s.archivedStatus(status))
 	}
 	return nil
+}
+
+func (s *Store) archivedStatus(status string) bool {
+	settings, err := s.SiteSettings()
+	if err != nil {
+		return status == domain.StatusResolved || status == domain.StatusFixedUnreleased
+	}
+	item, ok := domain.StatusByKey(settings.Statuses, status)
+	if !ok {
+		return false
+	}
+	return item.Archived
 }
 
 func (s *Store) DeleteFeedbackFiles(id int64) error {
@@ -1077,7 +1170,7 @@ func newPublicID() string {
 }
 
 func (s *Store) SiteSettings() (domain.SiteSettings, error) {
-	settings := domain.SiteSettings{ModVersion: "DEV BUILD", GameVersion: "RIMWORLD 1.6", Icon: "squirrel", AttachmentDir: filepath.Join(s.dataDir, "attachments")}
+	settings := domain.SiteSettings{ModVersion: "DEV BUILD", GameVersion: "RIMWORLD 1.6", Icon: "squirrel", AttachmentDir: filepath.Join(s.dataDir, "attachments"), Statuses: domain.DefaultStatuses()}
 	rows, err := s.db.Query(`SELECT key, value FROM site_settings`)
 	if err != nil {
 		return settings, err
@@ -1099,9 +1192,29 @@ func (s *Store) SiteSettings() (domain.SiteSettings, error) {
 			if domain.ValidAttachmentDir(value) {
 				settings.AttachmentDir = value
 			}
+		case "statuses":
+			if parsed := decodeStatuses(value); parsed != nil {
+				settings.Statuses = parsed
+			}
 		}
 	}
 	return settings, rows.Err()
+}
+
+func decodeStatuses(raw string) []domain.StatusLabel {
+	var items []domain.StatusLabel
+	if err := json.Unmarshal([]byte(raw), &items); err != nil || !domain.ValidStatusCatalog(items) {
+		return nil
+	}
+	return items
+}
+
+func encodeStatuses(items []domain.StatusLabel) (string, error) {
+	raw, err := json.Marshal(items)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func (s *Store) UpdateSiteSettings(settings domain.SiteSettings) error {
@@ -1115,6 +1228,7 @@ func (s *Store) UpdateSiteSettings(settings domain.SiteSettings) error {
 		{"game_version", settings.GameVersion},
 		{"icon", settings.Icon},
 		{"attachment_dir", settings.AttachmentDir},
+		{"statuses", mustStatuses(settings.Statuses)},
 	}
 	for _, pair := range pairs {
 		if _, err = tx.Exec(`INSERT INTO site_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, pair[0], pair[1]); err != nil {
@@ -1122,6 +1236,116 @@ func (s *Store) UpdateSiteSettings(settings domain.SiteSettings) error {
 		}
 	}
 	return tx.Commit()
+}
+
+func mustStatuses(items []domain.StatusLabel) string {
+	raw, err := encodeStatuses(items)
+	if err != nil {
+		return "[]"
+	}
+	return raw
+}
+
+func (s *Store) ReplaceStatuses(next []domain.StatusLabel) error {
+	current, err := s.SiteSettings()
+	if err != nil {
+		return err
+	}
+	keep := map[string]bool{}
+	for _, item := range next {
+		keep[item.Key] = true
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`SELECT DISTINCT status FROM feedback`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var status string
+		if err = rows.Scan(&status); err != nil {
+			rows.Close()
+			return err
+		}
+		if keep[status] {
+			continue
+		}
+		if _, err = tx.Exec(`UPDATE feedback SET status = ? WHERE status = ?`, domain.StatusOpen, status); err != nil {
+			rows.Close()
+			return err
+		}
+		if _, err = tx.Exec(`UPDATE feedback_events SET status = ? WHERE status = ?`, domain.StatusOpen, status); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	raw, err := encodeStatuses(next)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`INSERT INTO site_settings(key, value) VALUES('statuses', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, raw); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return s.recompressChangedArchives(current.Statuses, next)
+}
+
+func (s *Store) recompressChangedArchives(previous, next []domain.StatusLabel) error {
+	was := map[string]bool{}
+	for _, item := range previous {
+		was[item.Key] = item.Archived
+	}
+	now := map[string]bool{}
+	for _, item := range next {
+		now[item.Key] = item.Archived
+	}
+	changed := map[string]bool{}
+	for key, archived := range was {
+		if archived != now[key] {
+			changed[key] = true
+		}
+	}
+	for key, archived := range now {
+		if archived != was[key] {
+			changed[key] = true
+		}
+	}
+	for key := range changed {
+		rows, err := s.db.Query(`SELECT id FROM feedback WHERE status = ?`, key)
+		if err != nil {
+			return err
+		}
+		var ids []int64
+		for rows.Next() {
+			var id int64
+			if err = rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err = rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+		for _, id := range ids {
+			if err = s.RecompressFeedback(id, key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListMods() ([]domain.Mod, error) {

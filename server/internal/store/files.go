@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
-	"modders-feedback/server/internal/domain"
 )
 
 const (
@@ -19,13 +18,13 @@ const (
 )
 
 type archiveJob struct {
-	id     string
-	status string
+	id       string
+	archived bool
 }
 
 // Files keeps uploaded feedback files outside the SQLite database.
 // Active feedback uses a fast zstd level so a page can open within a couple
-// of seconds. Resolved feedback is rewritten at the highest level.
+// of seconds. Archived statuses are rewritten at the highest level.
 type Files struct {
 	root     string
 	rootLock sync.RWMutex
@@ -86,27 +85,27 @@ func (f *Files) loop() {
 		case <-f.stop:
 			return
 		case job := <-f.jobs:
-			_ = f.recompress(job.id, job.status)
+			_ = f.recompress(job.id, job.archived)
 		}
 	}
 }
 
-func (f *Files) Schedule(id, status string) {
+func (f *Files) Schedule(id string, archived bool) {
 	if !validObjectID(id) {
 		return
 	}
 	select {
-	case f.jobs <- archiveJob{id: id, status: status}:
+	case f.jobs <- archiveJob{id: id, archived: archived}:
 	default:
-		go func() { _ = f.recompress(id, status) }()
+		go func() { _ = f.recompress(id, archived) }()
 	}
 }
 
-func (f *Files) Save(id string, raw []byte, status string) error {
+func (f *Files) Save(id string, raw []byte, archived bool) error {
 	if !validObjectID(id) {
 		return errors.New("invalid attachment id")
 	}
-	packed, err := pack(raw, status)
+	packed, err := pack(raw, archived)
 	if err != nil {
 		return err
 	}
@@ -135,22 +134,22 @@ func (f *Files) Delete(id string) error {
 	return err
 }
 
-func (f *Files) recompress(id, status string) error {
+func (f *Files) recompress(id string, archived bool) error {
 	raw, err := f.Open(id)
 	if err != nil {
 		return err
 	}
-	return f.Save(id, raw, status)
+	return f.Save(id, raw, archived)
 }
 
 func (f *Files) objectPath(id string) string {
 	return filepath.Join(f.Root(), "objects", id[:2], id)
 }
 
-func pack(raw []byte, status string) ([]byte, error) {
+func pack(raw []byte, archived bool) ([]byte, error) {
 	level := zstd.SpeedDefault
 	label := archiveFast
-	if status == domain.StatusResolved || status == domain.StatusFixedUnreleased {
+	if archived {
 		level = zstd.SpeedBestCompression
 		label = archiveMax
 	}

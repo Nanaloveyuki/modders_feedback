@@ -245,12 +245,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .filter-select > svg:last-child { pointer-events: none; }
 .sort-button { display: flex; align-items: center; gap: 6px; border: 0; background: var(--accent); color: var(--accent-ink); white-space: nowrap; font-size: 12px; cursor: pointer; padding: 8px 12px; border-radius: 10px; box-shadow: 0 1px 3px rgba(40, 48, 72, .08), 0 4px 10px var(--shadow); }
 .list-header { display: none; }
+.bulk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: var(--radius-sm); box-shadow: 0 8px 20px var(--shadow); }
+.bulk-clear { border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.row-check { display: grid; place-items: center; width: 16px; }
+.row-check input { width: 16px; height: 16px; margin: 0; }
+.footer-range { display: flex; align-items: center; gap: 8px; }
+.status-menu { position: relative; display: inline-flex; align-items: center; }
+.status-menu select { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.status-menu > svg { position: absolute; right: 6px; pointer-events: none; }
+.status-menu .status-pill { padding-right: 18px; }
+.admin-stack { display: grid; gap: 14px; }
+.status-editor-list { display: grid; gap: 12px; }
+.status-editor-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px; border-radius: 14px; box-shadow: 0 8px 18px var(--shadow); }
+.status-color, .status-flag { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.status-color input { width: 36px; height: 28px; padding: 0; border: 0; background: transparent; }
+.status-remove { display: inline-flex; align-items: center; gap: 6px; justify-self: start; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.status-remove:disabled { opacity: .4; cursor: default; }
 .feedback-list { display: grid; gap: 12px; }
 .feedback-row {
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 12px 12px 12px 14px;
@@ -380,6 +396,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .compose-categories button { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 36px; padding: 0 10px; border: 0; border-radius: 10px; cursor: pointer; font-size: 12px; }
 .compose-preview { min-height: 360px; }
 .issue-editor { display: grid; gap: 14px; }
+.timeline { display: grid; gap: 12px; margin-top: 14px; }
+.timeline-card { min-width: 0; border-radius: 18px; box-shadow: var(--card-shadow); overflow: hidden; }
+.timeline-editor { display: grid; gap: 10px; padding: 14px 16px 16px; }
+.timeline-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; }
+.timeline-actions button, .timeline-login, .timeline-fold { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; cursor: pointer; font-size: 12px; }
+.timeline-login { margin: 14px 16px 16px; }
+.timeline-fold { justify-content: center; width: 100%; min-height: 36px; }
+.timeline-event { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; padding: 8px 4px; font-size: 13px; }
+.timeline-reply { display: flex; align-items: center; gap: 6px; margin: 12px 18px 0; font-size: 12px; opacity: .8; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .issue-editor textarea, .issue-editor .markdown-preview, .issue-editor input, .issue-side input, .issue-side textarea { width: 100%; box-sizing: border-box; }
 .issue-side .form-submit { width: 100%; }
 .detail-body { margin: 18px 0; font-size: 14px; line-height: 1.8; color: var(--text); overflow-wrap: anywhere; }
@@ -482,7 +507,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .sidebar { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); align-items: start; }
   .note-card { grid-column: 1 / -1; }
   .mod-nav { max-height: min(32vh, 280px); }
-  .feedback-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .feedback-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .row-author, .row-time { display: none; }
   .row-meta-mobile { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 11px; }
   .issue-layout { grid-template-columns: minmax(0, 1fr); }
@@ -500,7 +525,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
   .main-layout { width: calc(100% - 16px); padding: 12px 0 24px; }
   .sidebar { grid-template-columns: minmax(0, 1fr); }
   .feed { padding: 14px 12px 6px; }
-  .feedback-row { grid-template-columns: minmax(0, 1fr) auto; padding: 12px; }
+  .feedback-row { grid-template-columns: auto minmax(0, 1fr); padding: 12px; }
+  .status-editor-row { grid-template-columns: minmax(0, 1fr); }
   .row-status, .row-author, .row-time, .row-arrow { display: none; }
   .row-meta-mobile { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .row-title, .row-excerpt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }

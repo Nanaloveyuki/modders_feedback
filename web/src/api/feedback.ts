@@ -1,5 +1,5 @@
 import type { Locale } from '../i18n/messages';
-import type { Attachment, Category, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, ProfileUpdate, SiteSettings, Status, User } from '../types';
+import type { Attachment, Category, Comment, Feedback, FeedbackDraft, FeedbackUpdate, Mod, ModInput, ProfileUpdate, SiteSettings, Status, StatusLabel, Timeline, User } from '../types';
 import { api } from './client';
 
 export async function listFeedback(mod: string, category: Category | 'all', locale: Locale) {
@@ -56,12 +56,36 @@ export function updateStatus(id: number, status: Status, locale: Locale) {
   return api<{ status: Status }>(`/feedback/${id}/status`, locale, { method: 'PATCH', body: JSON.stringify({ status }) });
 }
 
+export function updateStatuses(ids: number[], status: Status, locale: Locale) {
+  return api<{ status: Status; ids: number[] }>('/feedback/status', locale, { method: 'PATCH', body: JSON.stringify({ ids, status }) });
+}
+
+export function replaceStatuses(statuses: StatusLabel[], locale: Locale) {
+  return api<SiteSettings>('/settings/statuses', locale, { method: 'PUT', body: JSON.stringify({ statuses }) });
+}
+
 export function updateFeedback(id: number, data: FeedbackUpdate, locale: Locale) {
   return api<Feedback>(`/feedback/${id}`, locale, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
 export function deleteFeedback(id: number, locale: Locale) {
   return api<void>(`/feedback/${id}`, locale, { method: 'DELETE' });
+}
+
+export function listTimeline(id: number, locale: Locale) {
+  return api<Timeline>(`/feedback/${id}/timeline`, locale);
+}
+
+export function createComment(id: number, body: string, replyTo: number, locale: Locale) {
+  return api<Comment>(`/feedback/${id}/comments`, locale, { method: 'POST', body: JSON.stringify({ body, replyTo }) });
+}
+
+export function updateComment(feedbackId: number, commentId: number, body: string, locale: Locale) {
+  return api<Comment>(`/feedback/${feedbackId}/comments/${commentId}`, locale, { method: 'PATCH', body: JSON.stringify({ body, replyTo: 0 }) });
+}
+
+export function deleteComment(feedbackId: number, commentId: number, locale: Locale) {
+  return api<void>(`/feedback/${feedbackId}/comments/${commentId}`, locale, { method: 'DELETE' });
 }
 
 export function siteSettings(locale: Locale) {

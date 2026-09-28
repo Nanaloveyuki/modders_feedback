@@ -35,7 +35,7 @@ The Go service owns authentication, validation, SQLite access, API routing, stat
 - Preserve the existing Go + React + SQLite + Docker architecture unless the task explicitly changes it.
 - Keep the interface adapted to RimWorld mod feedback. Bug reports should retain fields for game version, mod version, mod list/load order, reproduction details, and optional save link. Create and edit forms keep image paste and file attachment.
 - Keep the three category values exactly `bug`, `feature`, and `question`; they are enforced by the SQLite check constraint and API validation.
-- Keep status values exactly `open`, `in_progress`, `testing`, `fixed_unreleased`, `resolved`, `closed`, and `withdrawn`.
+- Status keys, labels, and day/night colors live in site settings. Built-in keys start as `open`, `in_progress`, `testing`, `fixed_unreleased`, `resolved`, `closed`, and `withdrawn`. An administrator can rename labels, recolor each tag, add a key, or delete one. Deleting a key moves its feedback back to `open`. `open` cannot be removed. Author-switchable tags are marked on the label; `open` stays author-switchable.
 - Public registration accepts a username, password, and optional email or QQ number. Do not store plaintext passwords, localStorage authentication tokens, or credentials in source control.
 - Passwords are stored only as bcrypt hashes. Sessions are HttpOnly, SameSite=Lax cookies containing signed JWTs.
 - Maintain request size limits, unknown-field rejection, title/body length validation, category validation, and status validation when changing API code.
@@ -93,14 +93,16 @@ Important API behavior:
 - `GET /rss` is public and returns an RSS 2.0 feed of the 50 newest feedback items. Item titles are `mod-category-title`. Descriptions keep written text and omit images, videos, and file links. `Accept-Language: en` selects English labels.
 - `POST /api/feedback` requires authentication and stores the item on the `mod` query slug.
 - `PATCH /api/feedback/{id}` requires the author or administrator session and updates title, body, versions, mod list, and save link.
-- `PATCH /api/feedback/{id}/status` lets an author switch only between `open` and `withdrawn`; an administrator can set any valid status.
+- `PATCH /api/feedback/{id}/status` lets an author switch only among statuses marked author-switchable, and only while the current status is also author-switchable. An administrator can set any configured status.
+- `PATCH /api/feedback/status` applies one status to 1-100 ids with the same permission rule.
+- `PUT /api/settings/statuses` requires the administrator session and replaces the status catalog. Each label stores a key, Chinese and English names, a day color, a night color, whether an author may switch it, and whether attachments for that status use maximum zstd compression.
 - `DELETE /api/feedback/{id}` requires the administrator session.
 - `GET /api/mods/{slug}/feedback/{bugs|feature|question}/{publicId}` is public. `bugs` maps to category `bug`. Each feedback row stores a lowercase UUID in `public_id`; startup assigns one to rows that do not have it. The browser route is `/mod/<slug>/<bugs|feature|question>/<publicId>`. Rows that still have no public id stay on the board overlay.
 - `GET /api/mods` is public and returns the selectable feedback mods.
 - `POST /api/mods`, `PATCH /api/mods/{id}`, and `DELETE /api/mods/{id}` require the administrator session. Each mod stores its own Steam and GitHub links, shown in the top bar for the selected mod. Deleting a mod also deletes its feedback, and the last mod cannot be deleted.
-- `GET /api/settings` is public and returns the displayed mod version, game version, and icon.
+- `GET /api/settings` is public and returns the displayed mod version, game version, icon, attachment directory, and status catalog.
 - `POST /api/attachments` requires a session and stores a draft file owned by the current user. `POST /api/feedback/{id}/attachments` requires the author or administrator. `GET /api/attachments/{id}` is public once saved feedback references the file; unpublished drafts stay private to the owner and administrator. Accepted files are PNG, JPEG, GIF, WebP, PDF, and plain text, up to 12MiB and 8 files per feedback item.
-- Uploaded bytes live in the administrator-configured attachment directory, defaulting to `$DATA_DIR/attachments`. Active feedback uses fast zstd compression. Resolved and fixed-but-unreleased feedback is recompressed at the highest zstd level in the background, and reads still return the original bytes. Feedback JSON includes `authorAvatar` when that account has a saved avatar.
+- Uploaded bytes live in the administrator-configured attachment directory, defaulting to `$DATA_DIR/attachments`. Active feedback uses fast zstd compression. Statuses marked archived are recompressed at the highest zstd level in the background, and reads still return the original bytes. Feedback JSON includes `authorAvatar` when that account has a saved avatar.
 - `PUT /api/settings` requires the administrator session. It can change the absolute attachment directory, and existing files move with that setting.
 
 ## Docker Deployment
