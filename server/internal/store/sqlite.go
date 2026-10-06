@@ -141,9 +141,18 @@ func (s *Store) ensureWithdrawnStatus() error {
 		return err
 	}
 	defer tx.Rollback()
+	var publicID int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('feedback') WHERE name = 'public_id'`).Scan(&publicID); err != nil {
+		return err
+	}
+	publicValue := "''"
+	if publicID > 0 {
+		publicValue = "COALESCE(public_id, '')"
+	}
 	statements := []string{
 		`CREATE TABLE feedback_status_migration (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
+ public_id TEXT NOT NULL DEFAULT '',
  mod_id INTEGER REFERENCES mods(id),
  category TEXT NOT NULL CHECK(category IN ('bug','feature','question')),
  category_number INTEGER,
@@ -153,8 +162,8 @@ func (s *Store) ensureWithdrawnStatus() error {
  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','testing','fixed_unreleased','resolved','closed','withdrawn')),
  created_at DATETIME NOT NULL
 )`,
-		`INSERT INTO feedback_status_migration(id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at)
- SELECT id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`,
+		`INSERT INTO feedback_status_migration(id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at)
+ SELECT id,` + publicValue + `,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`,
 		`DROP TABLE feedback`,
 		`ALTER TABLE feedback_status_migration RENAME TO feedback`,
 		`CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC)`,
@@ -1167,6 +1176,10 @@ func newPublicID() string {
 		n += 2
 	}
 	return string(out)
+}
+
+func (s *Store) reopen() error {
+	return s.migrate()
 }
 
 func (s *Store) SiteSettings() (domain.SiteSettings, error) {

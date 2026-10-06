@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -54,6 +55,10 @@ func TestRSSPublishesTextWithoutMedia(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("feed missing %q\n%s", want, body)
 		}
+	}
+	guid := fmt.Sprintf("<guid>feedback:%d</guid>", created.ID)
+	if !strings.Contains(body, guid) {
+		t.Fatalf("feed missing stable guid %q\n%s", guid, body)
 	}
 	for _, banned := range []string{"shot.png", "shot", "repro.mp4", "colony.pdf", "clip.webm", "<video", "</video>", "<img"} {
 		if strings.Contains(body, banned) {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/xml"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -73,7 +74,7 @@ func (h *Handler) rss(w http.ResponseWriter, r *http.Request) {
 		feed.Channel.Items = append(feed.Channel.Items, rssItem{
 			Title:       rssTitle(item, english),
 			Link:        link,
-			GUID:        link,
+			GUID:        fmt.Sprintf("feedback:%d", item.ID),
 			PubDate:     item.CreatedAt.UTC().Format(time.RFC1123Z),
 			Description: rssBody(item.Body),
 		})

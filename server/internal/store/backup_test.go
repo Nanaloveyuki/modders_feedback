@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"modders-feedback/server/internal/domain"
 )
 
 func TestBackupKeepsTenNewestCopies(t *testing.T) {
@@ -136,6 +138,58 @@ func openRestored(t *testing.T, path string) *Store {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	return db
+}
+
+func TestReopenPreservesPublicIDs(t *testing.T) {
+	dir := t.TempDir()
+	db := openPopulated(t, dir)
+	mod, err := db.ModBySlug(domain.DefaultModSlug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Register(domain.Registration{Username: "member", Password: "member-password"}); err != nil {
+		t.Fatal(err)
+	}
+	created, err := db.CreateFeedback(domain.Feedback{ModID: mod.ID, Category: domain.CategoryBug, Title: "Stable link", Body: "Keep the public id.", Author: "member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.db.Exec(`CREATE TABLE feedback_legacy (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ public_id TEXT NOT NULL DEFAULT '',
+ mod_id INTEGER REFERENCES mods(id),
+ category TEXT NOT NULL CHECK(category IN ('bug','feature','question')),
+ category_number INTEGER,
+ title TEXT NOT NULL, body TEXT NOT NULL, author TEXT NOT NULL,
+ game_version TEXT NOT NULL DEFAULT '', mod_version TEXT NOT NULL DEFAULT '',
+ mod_list TEXT NOT NULL DEFAULT '', save_link TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','resolved','closed')),
+ created_at DATETIME NOT NULL
+)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.db.Exec(`INSERT INTO feedback_legacy SELECT id,public_id,mod_id,category,category_number,title,body,author,game_version,mod_version,mod_list,save_link,status,created_at FROM feedback`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.db.Exec(`DROP TABLE feedback`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.db.Exec(`ALTER TABLE feedback_legacy RENAME TO feedback`); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.reopen(); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.reopen(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := db.GetFeedback(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.PublicID != created.PublicID {
+		t.Fatalf("public id changed from %s to %s", created.PublicID, reopened.PublicID)
+	}
 }
 
 func backupNames(t *testing.T, dir string) []string {

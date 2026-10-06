@@ -94,7 +94,7 @@ export function Panel({
   const { palette } = useTheme();
   return (
     <section
-      className={className ? `modal-panel ${className}` : 'modal-panel'}
+      className={className ? `dialog-panel ${className}` : 'dialog-panel'}
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
@@ -113,7 +113,7 @@ export function Scrim({ onClose, children }: { onClose: () => void; children: Re
   const { palette } = useTheme();
   return (
     <div
-      className="modal-backdrop"
+      className="dialog-scrim"
       style={{ background: palette.scrim }}
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
