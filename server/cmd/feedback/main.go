@@ -13,6 +13,7 @@ import (
 	"modders-feedback/server/internal/api"
 	"modders-feedback/server/internal/auth"
 	"modders-feedback/server/internal/config"
+	"modders-feedback/server/internal/mcpserver"
 	"modders-feedback/server/internal/store"
 )
 
@@ -45,10 +46,18 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	db.StartBackups(ctx)
+	mcpServer, err := mcpserver.New(db, cfg.MCPUsername, cfg.MCPTokenSHA256)
+	if err != nil {
+		return err
+	}
+
+	routes := http.NewServeMux()
+	routes.Handle("/mcp", mcpServer.Handler())
+	routes.Handle("/", api.New(db, auth.New(cfg.JWTSecret, cfg.CookieSecure), cfg.WebDir).Routes())
 
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
-		Handler: api.New(db, auth.New(cfg.JWTSecret, cfg.CookieSecure), cfg.WebDir).Routes(),
+		Handler: routes,
 	}
 	errCh := make(chan error, 1)
 	go func() {

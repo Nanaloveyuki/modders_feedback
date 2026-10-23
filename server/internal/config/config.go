@@ -8,24 +8,28 @@ import (
 )
 
 type Config struct {
-	ListenAddr    string
-	DataDir       string
-	WebDir        string
-	AdminUsername string
-	AdminPassword string
-	JWTSecret     string
-	CookieSecure  bool
+	ListenAddr     string
+	DataDir        string
+	WebDir         string
+	AdminUsername  string
+	AdminPassword  string
+	JWTSecret      string
+	CookieSecure   bool
+	MCPUsername    string
+	MCPTokenSHA256 string
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		ListenAddr:    env("LISTEN_ADDR", ":8080"),
-		DataDir:       env("DATA_DIR", "./data"),
-		WebDir:        env("WEB_DIR", "/app/web"),
-		AdminUsername: env("ADMIN_USERNAME", ""),
-		AdminPassword: env("ADMIN_PASSWORD", ""),
-		JWTSecret:     env("JWT_SECRET", ""),
-		CookieSecure:  os.Getenv("COOKIE_SECURE") == "true",
+		ListenAddr:     env("LISTEN_ADDR", ":8080"),
+		DataDir:        env("DATA_DIR", "./data"),
+		WebDir:         env("WEB_DIR", "/app/web"),
+		AdminUsername:  env("ADMIN_USERNAME", ""),
+		AdminPassword:  env("ADMIN_PASSWORD", ""),
+		JWTSecret:      env("JWT_SECRET", ""),
+		CookieSecure:   os.Getenv("COOKIE_SECURE") == "true",
+		MCPUsername:    env("MCP_USERNAME", ""),
+		MCPTokenSHA256: env("MCP_TOKEN_SHA256", ""),
 	}
 	if len(cfg.JWTSecret) < 32 {
 		return Config{}, errors.New("JWT_SECRET must contain at least 32 characters")

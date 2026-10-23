@@ -39,6 +39,47 @@ Back up the database and attachment directory before upgrading; startup migratio
 
 `GET /rss` is a public RSS 2.0 feed of the 50 newest feedback items across mods. Each item title is `mod-category-title`, and the description is the written feedback text. Image, video, and file markup is removed. `Accept-Language: en` switches the feed language and category labels to English.
 
+## MCP for local OMP
+
+The existing Go process serves Streamable HTTP at `/mcp` using the official Go MCP SDK. Anonymous tools: `list_mods`, `list_feedback`, `get_feedback`, `list_feedback_timeline`, and `get_catalog`. Authenticated tools: `whoami`, `update_feedback`, `set_feedback_status`, `create_mod`, and `update_mod`. No delete, upload, account-management, or server-settings tools are exposed. See [the accepted decision](docs/adr/0001-local-omp-mcp.md).
+
+Lists accept `limit` (default 20, maximum 100) and `offset` (0–10000); `nextOffset` means another page may exist. `list_mods` accepts a name/slug substring in `query`. `list_feedback` requires a `mod` slug and accepts `category` and configured `status` filters. Categories remain `bug`, `feature`, and `question`; use `get_catalog` for current statuses and permitted icons. Detail, timeline, and feedback writes use `publicId`; mod edits use the stable numeric `id`. Returned web and attachment paths are relative to the site origin.
+
+### Enable writes
+
+Without MCP credentials configured, only public reads work. To enable writes, associate one random token with an existing account. Generate and retain the token on the client; copy only its digest to the server:
+
+```sh
+MCP_TOKEN=$(openssl rand -hex 32)
+printf '%s' "$MCP_TOKEN" | sha256sum
+export MODDERS_FEEDBACK_MCP_AUTH="Bearer $MCP_TOKEN"
+unset MCP_TOKEN
+```
+
+Set server environment `MCP_USERNAME` to the existing account name and `MCP_TOKEN_SHA256` to the 64-character digest, then restart. Compose passes both variables through; direct service configuration also supports `MCP_USERNAME_FILE` and `MCP_TOKEN_SHA256_FILE`. Configure both or neither. Replacing the digest and restarting rotates the token; clearing both disables writes. Removing or renaming the associated account invalidates its token. Account roles are read on every authenticated request.
+
+The token does not grant extra permissions: members can edit only their own feedback and can switch status only when both current and target labels allow authors. Administrators can edit any feedback and create/edit mods. Feedback and mod edits accept partial fields; omission preserves the current value, and an empty optional string clears it. Empty titles/bodies, empty patches, invalid values, and unknown fields are rejected. For example, `update_feedback` accepts `{"publicId":"<feedback UUID>","title":"Corrected report title"}`; `update_mod` accepts `{"id":2,"githubUrl":""}`.
+
+### Connect OMP
+
+Merge this entry into your local OMP `mcp.json` without committing credentials. Start OMP from a shell containing `MODDERS_FEEDBACK_MCP_AUTH`; its value must include the `Bearer ` prefix. The environment-variable-name header resolution was verified with the installed OMP client. Replace the URL with the actual HTTPS site URL for remote access:
+
+```json
+{
+  "mcpServers": {
+    "modders-feedback": {
+      "type": "http",
+      "url": "http://127.0.0.1:8080/mcp",
+      "headers": { "Authorization": "MODDERS_FEEDBACK_MCP_AUTH" }
+    }
+  }
+}
+```
+
+For anonymous reads, omit `headers` entirely. An invalid explicit token returns 401 even for public tools; website cookies never authenticate MCP. This is a dedicated bearer-token integration, not OAuth auto-login or a public-key system. Use HTTPS remotely or a trusted local tunnel. A local OMP client does not make `/mcp` network-private: the endpoint shares the website listener, and public reads remain reachable wherever the site is reachable.
+
+Verification (2026-10-23): real Go SDK and installed OMP HTTP clients initialized and called tools; isolated regression tests covered member/admin permissions, configurable statuses, partial edits preserving attachments, rejected unknown fields, and live role lookup. Live restart checks covered file-based credentials, token rotation (old token rejected, new token accepted), and persisted feedback. Oversized bodies, batches, and untrusted origins were rejected. Website HTTP checks covered login, registration, feedback creation/editing, status changes, denied privileged actions, and frontend HTML/JavaScript loading. Frontend production build, CGO-free backend build, and `go test -race ./...` passed. Windows Compose configuration validation passed; no production deployment or Docker Compose runtime verification was performed for this change.
+
 ## Local development
 
 Requirements: Go 1.26 or newer and Node.js 22.12+ or 24+; Node 24.22.1 is the verified container build version. The frontend uses React 19.3, Vite 8, TypeScript 7, and Lucide 1.61. Build tooling belongs in `devDependencies`; deployment builds must install development dependencies before bundling.

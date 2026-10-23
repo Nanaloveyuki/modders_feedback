@@ -28,6 +28,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"modders-feedback/server/internal/auth"
+	"modders-feedback/server/internal/board"
 	"modders-feedback/server/internal/domain"
 	"modders-feedback/server/internal/httpx"
 	"modders-feedback/server/internal/store"
@@ -430,37 +431,8 @@ func (h *Handler) updateStatuses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) applyStatus(w http.ResponseWriter, r *http.Request, user domain.User, id int64, status string) bool {
-	settings, err := h.store.SiteSettings()
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
-		return false
-	}
-	next, ok := domain.StatusByKey(settings.Statuses, status)
-	if !ok {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "反馈状态无效", "Invalid feedback status"))
-		return false
-	}
-	item, err := h.store.GetFeedback(id)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
-		return false
-	}
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
-		return false
-	}
-	current, known := domain.StatusByKey(settings.Statuses, item.Status)
-	if user.Role != "admin" && (!authorOf(user, item) || !known || !current.Author || !next.Author) {
-		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能在自己的反馈中切换允许的状态", "You can only switch your own feedback between allowed statuses"))
-		return false
-	}
-	updated, err := h.store.UpdateStatus(id, user.Username, status)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈状态失败", "Could not update feedback status"))
-		return false
-	}
-	if !updated {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+	if err := board.New(h.store).SetStatus(user, id, status); err != nil {
+		writeBoardError(w, r, err)
 		return false
 	}
 	return true
@@ -506,44 +478,13 @@ func (h *Handler) updateFeedback(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var input domain.FeedbackUpdate
+	var input board.FeedbackPatch
 	if !httpx.Decode(w, r, &input) {
 		return
 	}
-	input.Title = strings.TrimSpace(input.Title)
-	input.Body = strings.TrimSpace(input.Body)
-	input.GameVersion = strings.TrimSpace(input.GameVersion)
-	input.ModVersion = strings.TrimSpace(input.ModVersion)
-	input.ModList = strings.TrimSpace(input.ModList)
-	input.SaveLink = strings.TrimSpace(input.SaveLink)
-	if !withinRunes(input.Title, 5, 120) || !withinRunes(input.Body, 10, 12000) {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查标题（5-120 字）和描述（10-12000 字）", "Check the title (5-120 characters) and description (10-12000 characters)"))
-		return
-	}
-	if len(input.GameVersion) > 40 || len(input.ModVersion) > 80 || len(input.ModList) > 6000 || len(input.SaveLink) > 500 {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "版本、模组列表或存档链接超出长度限制", "Version, mod list, or save link is too long"))
-		return
-	}
-	current, err := h.store.GetFeedback(id)
-	if errors.Is(err, sql.ErrNoRows) {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
-		return
-	}
+	item, err := board.New(h.store).UpdateFeedback(user, id, input)
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈失败", "Could not update feedback"))
-		return
-	}
-	if user.Role != "admin" && !authorOf(user, current) {
-		httpx.Error(w, http.StatusForbidden, httpx.Text(r, "只能编辑自己的反馈", "You can only edit your own feedback"))
-		return
-	}
-	item, updated, err := h.store.UpdateFeedback(id, user.Username, input)
-	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "更新反馈失败", "Could not update feedback"))
-		return
-	}
-	if !updated {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该反馈", "Feedback was not found"))
+		writeBoardError(w, r, err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, item)
@@ -870,40 +811,38 @@ func (h *Handler) listMods(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createMod(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireAdmin(w, r); !ok {
-		return
-	}
-	input, ok := decodeMod(w, r)
+	user, ok := h.requireAdmin(w, r)
 	if !ok {
 		return
 	}
-	created, err := h.store.CreateMod(input)
+	var input domain.ModInput
+	if !httpx.Decode(w, r, &input) {
+		return
+	}
+	created, err := board.New(h.store).CreateMod(user, input)
 	if err != nil {
-		httpx.Error(w, http.StatusConflict, httpx.Text(r, "无法添加模组，短标识可能已存在", "Could not add the mod; the slug may already exist"))
+		writeBoardError(w, r, err)
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, created)
 }
 
 func (h *Handler) updateMod(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireAdmin(w, r); !ok {
+	user, ok := h.requireAdmin(w, r)
+	if !ok {
 		return
 	}
 	id, ok := feedbackID(w, r)
 	if !ok {
 		return
 	}
-	input, ok := decodeMod(w, r)
-	if !ok {
+	var input board.ModPatch
+	if !httpx.Decode(w, r, &input) {
 		return
 	}
-	updated, found, err := h.store.UpdateMod(id, input)
+	updated, err := board.New(h.store).UpdateMod(user, id, input)
 	if err != nil {
-		httpx.Error(w, http.StatusConflict, httpx.Text(r, "无法保存模组，短标识可能已存在", "Could not save the mod; the slug may already exist"))
-		return
-	}
-	if !found {
-		httpx.Error(w, http.StatusNotFound, httpx.Text(r, "未找到该模组", "Mod was not found"))
+		writeBoardError(w, r, err)
 		return
 	}
 	httpx.JSON(w, http.StatusOK, updated)
@@ -1035,21 +974,11 @@ func (h *Handler) requestedMod(w http.ResponseWriter, r *http.Request) (domain.M
 	return mod, true
 }
 
-func decodeMod(w http.ResponseWriter, r *http.Request) (domain.ModInput, bool) {
-	var input domain.ModInput
-	if !httpx.Decode(w, r, &input) {
-		return domain.ModInput{}, false
+func writeBoardError(w http.ResponseWriter, r *http.Request, err error) {
+	var failure *board.Error
+	if errors.As(err, &failure) {
+		httpx.Error(w, failure.Status, httpx.Text(r, failure.MessageZh, failure.MessageEn))
+		return
 	}
-	input.Slug = strings.TrimSpace(input.Slug)
-	input.Name = strings.TrimSpace(input.Name)
-	input.GameVersion = strings.TrimSpace(input.GameVersion)
-	input.ModVersion = strings.TrimSpace(input.ModVersion)
-	input.Icon = strings.TrimSpace(input.Icon)
-	input.SteamURL = strings.TrimSpace(input.SteamURL)
-	input.GitHubURL = strings.TrimSpace(input.GitHubURL)
-	if !domain.ValidSlug(input.Slug) || !withinRunes(input.Name, 1, 40) || !withinRunes(input.GameVersion, 1, 40) || !withinRunes(input.ModVersion, 1, 40) || !domain.ValidIcon(input.Icon) || !domain.ValidOptionalURL(input.SteamURL) || !domain.ValidOptionalURL(input.GitHubURL) {
-		httpx.Error(w, http.StatusBadRequest, httpx.Text(r, "请检查模组标识、名称（1-40 字）、版本、图标和链接", "Check the slug, name (1-40 characters), versions, icon, and links"))
-		return domain.ModInput{}, false
-	}
-	return input, true
+	httpx.Error(w, http.StatusInternalServerError, httpx.Text(r, "操作失败", "The operation failed"))
 }
