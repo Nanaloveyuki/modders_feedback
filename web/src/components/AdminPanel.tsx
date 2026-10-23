@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash } from 'lucide-react';
 import { useI18n } from '../i18n/context';
 import { AttachmentEditor, editorTarget } from './AttachmentEditor';
 import { siteIconKeys, siteIcons } from '../lib/icons';
@@ -159,7 +159,7 @@ function SettingsPage({ settings, onSaveSettings, onSaveStatuses }: Pick<Props, 
                 {t('statusArchived')}
               </label>
               <button type="button" className="status-remove" disabled={item.key === 'open'} style={{ color: palette.danger }} onClick={() => setStatuses((current) => current.filter((_, position) => position !== index))}>
-                <Trash2 size={14} />{t('removeStatus')}
+                <Trash size={14} />{t('removeStatus')}
               </button>
             </div>
           ))}
@@ -264,7 +264,7 @@ function ModsPage({ mods, onSaveMod, onAddMod, onDeleteMod }: Pick<Props, 'mods'
             <div className="admin-actions">
               <ActionButton className="form-submit" disabled={busy}>{busy ? t('savingMod') : t('saveMod')}</ActionButton>
               <button type="button" className="danger-button" disabled={busy || mods.length < 2} onClick={() => void removeMod(item)} style={{ color: palette.danger, background: palette.hover }}>
-                <Trash2 size={14} />{busy ? t('deletingMod') : t('deleteMod')}
+                <Trash size={14} />{busy ? t('deletingMod') : t('deleteMod')}
               </button>
             </div>
           </form>
@@ -375,7 +375,7 @@ function AdminRecord({ item, busy, onSave, onRemove }: { item: Feedback; busy: b
       <div className="admin-actions">
         <ActionButton className="form-submit" disabled={busy}>{busy ? t('savingRecord') : t('saveRecord')}</ActionButton>
         <button type="button" className="danger-button" disabled={busy} onClick={() => onRemove(item)} style={{ color: palette.danger, background: palette.hover }}>
-          <Trash2 size={14} />{busy ? t('deletingRecord') : t('deleteRecord')}
+          <Trash size={14} />{busy ? t('deletingRecord') : t('deleteRecord')}
         </button>
       </div>
     </form>

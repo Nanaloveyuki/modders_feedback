@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, CircleHelp, Sparkles } from 'lucide-react';
+import { TriangleAlert, CircleQuestionMark, Sparkles } from 'lucide-react';
 import { localeTag, useI18n } from '../i18n/context';
 import type { Category, Status, StatusLabel } from '../types';
 
 export const categoryIcons: Record<Category, ReactNode> = {
-  bug: <AlertTriangle size={15} />,
+  bug: <TriangleAlert size={15} />,
   feature: <Sparkles size={15} />,
-  question: <CircleHelp size={15} />,
+  question: <CircleQuestionMark size={15} />,
 };
 
 export const categoryKeys = Object.keys(categoryIcons) as Category[];

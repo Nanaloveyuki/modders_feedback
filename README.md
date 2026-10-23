@@ -19,7 +19,7 @@ Copy or replace the example value in `secrets/admin_password` before exposing th
 
 Open `http://localhost:8080`. The initial administrator account is seeded on the first start. For internet-facing deployments, terminate HTTPS at a trusted reverse proxy and set `COOKIE_SECURE=true`.
 
-The image uses Alpine runtime and public ECR mirrors for the Node, Go, and Alpine base images. This avoids Docker Hub and gcr.io registry issues in restricted networks. On Docker Desktop with WSL, the Compose project path must be accessible to Docker Desktop; if WSL secret mounts report a missing `archlinux.sock`, place the two secret files under a Windows path and set `ADMIN_PASSWORD_FILE` and `JWT_SECRET_FILE` to those Windows paths before starting. Docker Desktop 4.92 was verified with copied Windows secret files; the container reported `healthy` and served port `8080`.
+The image builds with Node 24.22.1 and Go 1.26.10 on Alpine 3.24, then runs on Alpine 3.24.3 as UID/GID `65532`. It uses public ECR mirrors to avoid Docker Hub and gcr.io registry issues in restricted networks. On Docker Desktop with WSL, the Compose project path must be accessible to Docker Desktop; if WSL secret mounts report a missing `archlinux.sock`, place the two secret files under a Windows path and set `ADMIN_PASSWORD_FILE` and `JWT_SECRET_FILE` to those Windows paths before starting. The earlier Docker Desktop 4.92 deployment was verified with copied Windows secret files; that result does not validate the updated images.
 
 Change the published port with `FEEDBACK_PORT`. To stop without deleting feedback:
 
@@ -31,12 +31,31 @@ docker compose down
 
 ## Feedback workflow
 
-The board has bug reports, feature requests, and general questions. Signed-in users can create feedback; visitors can read and filter posts. Bug reports include optional RimWorld version, mod version, mod list/load order, and save-share URL fields. The account supplied in the environment is the only account; registration is disabled. A signed-in administrator can update feedback status, edit title, body, versions, mod list, and save link, delete a record, and change the displayed mod version, game version, site icon, and attachment directory. Signed-in members can paste images or attach PNG, JPEG, GIF, WebP, PDF, and plain-text files while creating or editing feedback. Files are stored under the configured directory, compressed with zstd, and recompressed at the highest level when a feedback item is marked resolved.
+The board has bug reports, feature requests, and general questions. Visitors can read and filter posts or register with a username, password, and optional email or QQ number. Members can create feedback, edit their own content, and switch between author-switchable statuses while their current status permits it. Administrators can update any status, edit or delete feedback, and manage mods and site settings. Bug reports include optional RimWorld version, mod version, mod list/load order, and save-share URL fields. Create and edit forms support image paste and PNG, JPEG, GIF, WebP, PDF, and plain-text attachments. Files use fast zstd compression by default; statuses marked archived trigger maximum compression in the background.
 
 SQLite is created at `/data/feedback.db`; the Compose configuration persists `/data` in the `feedback-data` volume. The service also writes an online backup to `/data/backups/feedback-<UTC timestamp>.db` at startup and every 72 hours. It keeps the 10 newest completed copies and deletes the oldest when a new copy is published. If the disk is full, it deletes the oldest completed copy and retries once; a failed attempt is removed and does not replace a good copy. A backup panic, including an out-of-memory failure inside the backup, is logged and does not stop the HTTP server. `GET /api/health` is available for monitoring.
+
+Back up the database and attachment directory before upgrading; startup migrations run before the automatic startup backup. Status migrations preserve attachments and timelines when rebuilding feedback tables and no longer repeat on an already-migrated schema. A database backup alone does not include uploaded files.
 
 `GET /rss` is a public RSS 2.0 feed of the 50 newest feedback items across mods. Each item title is `mod-category-title`, and the description is the written feedback text. Image, video, and file markup is removed. `Accept-Language: en` switches the feed language and category labels to English.
 
 ## Local development
 
+Requirements: Go 1.26 or newer and Node.js 22.12+ or 24+; Node 24.22.1 is the verified container build version. The frontend uses React 19.3, Vite 8, TypeScript 7, and Lucide 1.61. Build tooling belongs in `devDependencies`; deployment builds must install development dependencies before bundling.
+
 The web app runs with Vite and proxies `/api` to the Go service during development. Build the frontend with `cd web && npm ci && npm run build`. Start the API from the `server/` directory with `DATA_DIR=../data ADMIN_USERNAME=admin ADMIN_PASSWORD='admin123456_' JWT_SECRET='local-random-secret-at-least-32-characters' go run ./cmd/feedback`; it serves the built `web/dist` files when started there. For Vite hot reload, run `npm run dev` from `web/` in a second terminal.
+
+### Dependency update verification (2026-10-23)
+
+- `npm ci` and the frontend production build passed, including inside the Node 24.22.1 Alpine image filesystem. `npm audit` reported zero vulnerabilities.
+- Go 1.26.10 built the CGO-free service and passed `go test ./...`. `govulncheck` found no reachable vulnerabilities; module-level scanning still reports GO-2026-5932 in the unused `golang.org/x/crypto/openpgp` package, with no fixed version available. The service uses `bcrypt`, not OpenPGP.
+- Removed the untrusted-header `RealIP` middleware. Restored the missing feedback-edit route and added author/admin permission regression coverage.
+- Real HTTP and browser checks covered authentication, permissions, feedback creation/editing, comments, attachment access and archive compression, WebP avatars, Markdown sanitization, RSS, desktop/mobile layouts, restart preservation, and backup restore using temporary data.
+- The service also ran with UID/GID `65532`, a read-only Alpine 3.24.3 root, and dropped capabilities. This was an isolated filesystem smoke run, not a Docker Compose deployment verification.
+
+
+### OMP language servers
+
+`.omp/lsp.json` enables Go, TypeScript/React, HTML, CSS, and JSON language servers when OMP starts at the repository root, despite the nested `server/` and `web/` projects. Install Go tooling with `go install golang.org/x/tools/gopls@latest` and HTML/CSS/JSON tooling with `npm install -g vscode-langservers-extracted`; ensure `gopls` is on OMP's PATH. Run `npm ci` in `web/` to provide the project's TypeScript 7 native server (`tsc --lsp --stdio`); no separate `typescript-language-server` is needed.
+
+The HTML/CSS/JSON command paths currently match this workstation's `/usr/sbin/` global npm binaries. Adjust those paths for another installation. After installation or configuration changes, use OMP's LSP tool with `{"action":"reload","file":"*"}`, then request hover or definitions on a source file to verify the server is working.

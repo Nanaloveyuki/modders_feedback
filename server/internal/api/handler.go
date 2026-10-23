@@ -48,7 +48,7 @@ func New(store *store.Store, sessions auth.Sessions, webDir string) *Handler {
 
 func (h *Handler) Routes() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.RealIP, middleware.Recoverer, middleware.Timeout(15*time.Second))
+	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(15*time.Second))
 	r.Get("/api/health", h.health)
 	r.Get("/rss", h.rss)
 	r.Post("/api/auth/login", h.login)
@@ -65,6 +65,7 @@ func (h *Handler) Routes() *chi.Mux {
 	r.Delete("/api/mods/{id}", h.deleteMod)
 	r.Get("/api/feedback", h.listFeedback)
 	r.Post("/api/feedback", h.createFeedback)
+	r.Patch("/api/feedback/{id}", h.updateFeedback)
 	r.Patch("/api/feedback/status", h.updateStatuses)
 	r.Patch("/api/feedback/{id}/status", h.updateStatus)
 	r.Put("/api/settings/statuses", h.replaceStatuses)

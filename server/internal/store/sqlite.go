@@ -56,8 +56,16 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) migrate() error {
-	_, err := s.db.Exec(`
+func (s *Store) migrate() (err error) {
+	// Rebuilding a parent table must not cascade into attachments or timelines.
+	if _, err = s.db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer func() {
+		_, restoreErr := s.db.Exec(`PRAGMA foreign_keys = ON`)
+		err = errors.Join(err, restoreErr)
+	}()
+	_, err = s.db.Exec(`
 CREATE TABLE IF NOT EXISTS users (
  id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash BLOB NOT NULL, created_at DATETIME NOT NULL
 );
@@ -124,8 +132,18 @@ CREATE INDEX IF NOT EXISTS feedback_created_at ON feedback(created_at DESC);`)
 	if err = s.ensureCommentID(); err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`)
-	return err
+	if _, err = s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS feedback_category_number ON feedback(mod_id, category, category_number)`); err != nil {
+		return err
+	}
+	rows, err := s.db.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return errors.New("database migration left invalid foreign key references")
+	}
+	return rows.Err()
 }
 
 func (s *Store) ensureWithdrawnStatus() error {
@@ -133,7 +151,7 @@ func (s *Store) ensureWithdrawnStatus() error {
 	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'feedback'`).Scan(&definition); err != nil {
 		return err
 	}
-	if strings.Contains(definition, "'withdrawn'") {
+	if !strings.Contains(definition, "CHECK(status IN (") || strings.Contains(definition, "'withdrawn'") {
 		return nil
 	}
 	tx, err := s.db.Begin()
@@ -183,7 +201,7 @@ func (s *Store) ensureExtendedStatus() error {
 	if err := s.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'feedback'`).Scan(&definition); err != nil {
 		return err
 	}
-	if strings.Contains(definition, "'testing'") && strings.Contains(definition, "'fixed_unreleased'") {
+	if !strings.Contains(definition, "CHECK(status IN (") || (strings.Contains(definition, "'testing'") && strings.Contains(definition, "'fixed_unreleased'")) {
 		return nil
 	}
 	tx, err := s.db.Begin()

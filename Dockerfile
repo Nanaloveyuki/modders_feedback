@@ -1,18 +1,18 @@
-FROM public.ecr.aws/docker/library/node:22-alpine AS web-build
+FROM public.ecr.aws/docker/library/node:24.22.1-alpine3.24 AS web-build
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 
-FROM public.ecr.aws/docker/library/golang:1.24-alpine AS server-build
+FROM public.ecr.aws/docker/library/golang:1.26.10-alpine3.24 AS server-build
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/feedback ./cmd/feedback
 
-FROM public.ecr.aws/docker/library/alpine:3.22
+FROM public.ecr.aws/docker/library/alpine:3.24.3
 RUN addgroup -S -g 65532 nonroot && adduser -S -D -H -u 65532 -G nonroot nonroot \
     && mkdir -p /data && chown nonroot:nonroot /data
 WORKDIR /app

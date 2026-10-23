@@ -1,0 +1,23 @@
+{
+  "servers": {
+    "gopls": {
+      "rootMarkers": ["go.mod", "go.work", "go.sum", "server/go.mod"]
+    },
+    "typescript-native": {
+      "command": "./web/node_modules/.bin/tsc",
+      "rootMarkers": ["web/package.json"]
+    },
+    "vscode-html-language-server": {
+      "command": "/usr/sbin/vscode-html-language-server",
+      "rootMarkers": ["package.json", ".git", "web/package.json"]
+    },
+    "vscode-css-language-server": {
+      "command": "/usr/sbin/vscode-css-language-server",
+      "rootMarkers": ["package.json", ".git", "web/package.json"]
+    },
+    "vscode-json-language-server": {
+      "command": "/usr/sbin/vscode-json-language-server",
+      "rootMarkers": ["package.json", ".git", "web/package.json"]
+    }
+  }
+}

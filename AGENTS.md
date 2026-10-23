@@ -47,7 +47,7 @@ The Go service owns authentication, validation, SQLite access, API routing, stat
 
 ## Local Frontend Development
 
-Requirements: Node.js and npm.
+Requirements: Node.js 22.12+ or 24+ and npm; the Docker build uses Node 24.22.1. Install development dependencies when building: Vite, TypeScript, and the React plugin live in `devDependencies`.
 
 ```sh
 cd web
@@ -80,7 +80,7 @@ go build ./...
 go run ./cmd/feedback
 ```
 
-`server/go.mod` uses Go 1.24. The SQLite driver is `modernc.org/sqlite`, so the service builds with `CGO_ENABLED=0`.
+`server/go.mod` requires Go 1.26; the Docker build uses Go 1.26.10. The SQLite driver is `modernc.org/sqlite`, so the service builds with `CGO_ENABLED=0`. Before upgrades, back up both SQLite and the attachment directory: startup migrations run before the automatic startup backup. Table-rebuild migrations must preserve child rows and restore foreign-key enforcement.
 
 Important API behavior:
 
@@ -170,7 +170,7 @@ $env:DOCKER_HOST = 'npipe:////./pipe/dockerDesktopLinuxEngine'
 
 If Docker reports `docker-credential-desktop` missing, the Windows Docker config is referencing the Desktop credential helper but the helper is not on the process PATH. Use a temporary Docker config or run from PowerShell with the Docker Desktop installation environment; do not rewrite the user's normal Docker config as a project change.
 
-The image uses public ECR mirrors for Node, Go, and Alpine because Docker Hub and `gcr.io` pulls were unreliable in the verified environment. The final runtime is Alpine 3.22 with UID/GID `65532`, not a root or distroless process.
+The image uses public ECR mirrors for Node, Go, and Alpine because Docker Hub and `gcr.io` pulls were unreliable in the verified environment. The final runtime is Alpine 3.24.3 with UID/GID `65532`, not a root or distroless process.
 
 ## Verification Checklist
 

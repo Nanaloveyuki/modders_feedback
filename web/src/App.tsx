@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, Check, X } from 'lucide-react';
+import { TriangleAlert, Check, X } from 'lucide-react';
 import { createFeedback, createMod, currentUser, deleteFeedback, deleteMod, getFeedback, listFeedback, listMods, login, logout, register, replaceStatuses, siteSettings, updateFeedback, updateMod, updateSiteSettings, updateStatus, updateStatuses } from './api/feedback';
 import { AccountPage } from './components/AccountPage';
 import { AdminPanel } from './components/AdminPanel';
@@ -319,7 +319,7 @@ export function App() {
       </main>
       )}
 
-      {error && <Notice kind="error" closeLabel={t('closeNotice')} onClose={() => setError('')} closeIcon={<X size={15} />}><AlertTriangle size={16} />{error}</Notice>}
+      {error && <Notice kind="error" closeLabel={t('closeNotice')} onClose={() => setError('')} closeIcon={<X size={15} />}><TriangleAlert size={16} />{error}</Notice>}
       {notice && <Notice kind="ok" closeLabel={t('closeNotice')} onClose={() => setNotice('')} closeIcon={<X size={15} />}><Check size={16} />{notice}</Notice>}
       {modal && (
         <Modal
